@@ -1,0 +1,99 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "TasteMood Food Discovery API",
+    "description": "Production-grade AI-powered restaurant and food discovery backend for Egypt.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000/api/v1",
+      "description": "Local Development Server"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": { "description": "Server is operational" }
+        }
+      }
+    },
+    "/recommendations": {
+      "post": {
+        "summary": "AI Food Recommendation Engine",
+        "description": "Submits structured or natural language food request, extracts intent, and retrieves ranked candidates from structured database.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": { "type": "string", "example": "I want something spicy under 250 EGP near me" },
+                  "maxPrice": { "type": "number", "example": 250 },
+                  "lat": { "type": "number", "example": 30.0444 },
+                  "lng": { "type": "number", "example": 31.2357 },
+                  "radiusKm": { "type": "number", "example": 10 },
+                  "surpriseMe": { "type": "boolean", "example": false },
+                  "limit": { "type": "number", "example": 5 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Ranked food recommendations with factual AI explanations" }
+        }
+      }
+    },
+    "/search/restaurants": {
+      "get": {
+        "summary": "Search Restaurants",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "cuisine", "in": "query", "schema": { "type": "string" } },
+          { "name": "lat", "in": "query", "schema": { "type": "number" } },
+          { "name": "lng", "in": "query", "schema": { "type": "number" } },
+          { "name": "radiusKm", "in": "query", "schema": { "type": "number" } }
+        ],
+        "responses": { "200": { "description": "List of matching restaurants" } }
+      }
+    },
+    "/search/dishes": {
+      "get": {
+        "summary": "Search Dishes",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "cuisine", "in": "query", "schema": { "type": "string" } },
+          { "name": "minPrice", "in": "query", "schema": { "type": "number" } },
+          { "name": "maxPrice", "in": "query", "schema": { "type": "number" } }
+        ],
+        "responses": { "200": { "description": "List of matching dishes" } }
+      }
+    },
+    "/restaurants": {
+      "get": {
+        "summary": "List Restaurants",
+        "responses": { "200": { "description": "Paginated list of restaurants" } }
+      }
+    },
+    "/me/preferences": {
+      "get": {
+        "summary": "Get authenticated user preferences",
+        "responses": { "200": { "description": "User preference profile" } }
+      },
+      "put": {
+        "summary": "Update user preferences",
+        "responses": { "200": { "description": "Updated preference profile" } }
+      }
+    },
+    "/interactions": {
+      "post": {
+        "summary": "Record user interaction / feedback signal",
+        "responses": { "201": { "description": "Interaction recorded" } }
+      }
+    }
+  }
+}

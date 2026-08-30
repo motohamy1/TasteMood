@@ -1,0 +1,398 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  USER
+  ADMIN
+  RESTAURANT_OWNER
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+  DRAFT
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  VERIFIED
+  NEEDS_REVIEW
+}
+
+enum PriceRange {
+  BUDGET
+  MODERATE
+  EXPENSIVE
+  LUXURY
+}
+
+enum InteractionType {
+  VIEW_RESTAURANT
+  VIEW_DISH
+  CLICK_RECOMMENDATION
+  LIKE
+  DISLIKE
+  NOT_INTERESTED
+  TOO_EXPENSIVE
+  TOO_FAR
+  WRONG_TASTE
+  SAVED
+  SHARED
+}
+
+enum TasteAttribute {
+  SPICY
+  SWEET
+  SAVORY
+  SOUR
+  BITTER
+  CREAMY
+  RICH
+  REFRESHING
+}
+
+enum MealCharacteristic {
+  LIGHT
+  HEAVY
+  FILLING
+  SNACK
+  BREAKFAST
+  LUNCH
+  DINNER
+  DESSERT
+  BEVERAGE
+}
+
+enum DietaryProperty {
+  VEGETARIAN
+  VEGAN
+  HALAL
+  GLUTEN_FREE
+  DAIRY_FREE
+  NUT_FREE
+  LOW_CARB
+}
+
+// ==========================================
+// CORE USER & PREFERENCES
+// ==========================================
+
+model User {
+  id          String   @id @default(uuid())
+  authUserId  String   @unique
+  email       String?
+  displayName String
+  role        UserRole @default(USER)
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  preferenceProfile UserPreferenceProfile?
+  interactions      UserInteraction[]
+
+  @@map("users")
+}
+
+model UserPreferenceProfile {
+  id                    String               @id @default(uuid())
+  userId                String               @unique
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredCuisines     String[]             @default([])
+  dislikedCuisines      String[]             @default([])
+  preferredPriceRange   PriceRange?
+  dietaryRestrictions   DietaryProperty[]    @default([])
+  spicePreference       Int                  @default(2) // 0 = none, 5 = extreme
+  preferredMealTypes    MealCharacteristic[] @default([])
+  atmospherePreferences String[]             @default([])
+  inferredPreferences   Json?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@map("user_preference_profiles")
+}
+
+model UserInteraction {
+  id              String          @id @default(uuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurantId    String?
+  restaurant      Restaurant?     @relation(fields: [restaurantId], references: [id], onDelete: SetNull)
+  branchId        String?
+  branch          Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  dishId          String?
+  dish            Dish?           @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  interactionType InteractionType
+  metadata        Json?
+  createdAt       DateTime        @default(now())
+
+  @@index([userId, interactionType])
+  @@index([restaurantId])
+  @@index([dishId])
+  @@map("user_interactions")
+}
+
+// ==========================================
+// RESTAURANT & BRANCH
+// ==========================================
+
+model Restaurant {
+  id                 String             @id @default(uuid())
+  name               String
+  slug               String             @unique
+  description        String?
+  priceRange         PriceRange         @default(MODERATE)
+  status             RecordStatus       @default(ACTIVE)
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  lastVerifiedAt     DateTime?
+  source             String             @default("MANUAL")
+  logoUrl            String?
+  coverImageUrl      String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  branches     Branch[]
+  cuisines     RestaurantCuisine[]
+  menus        Menu[]
+  interactions UserInteraction[]
+
+  @@index([status, verificationStatus])
+  @@map("restaurants")
+}
+
+model Cuisine {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  restaurants RestaurantCuisine[]
+
+  @@map("cuisines")
+}
+
+model RestaurantCuisine {
+  restaurantId String
+  cuisineId    String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  cuisine      Cuisine    @relation(fields: [cuisineId], references: [id], onDelete: Cascade)
+
+  @@id([restaurantId, cuisineId])
+  @@map("restaurant_cuisines")
+}
+
+model Branch {
+  id                 String             @id @default(uuid())
+  restaurantId       String
+  restaurant         Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name               String
+  address            String
+  latitude           Float
+  longitude          Float
+  phone              String?
+  status             RecordStatus       @default(ACTIVE)
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  operatingHours BranchOperatingHour[]
+  atmospheres    BranchAtmosphere[]
+  menus          Menu[]
+  interactions   UserInteraction[]
+
+  @@index([restaurantId])
+  @@index([latitude, longitude])
+  @@map("branches")
+}
+
+model BranchOperatingHour {
+  id          String   @id @default(uuid())
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int      // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  openTime    String   // "HH:mm" 24h format
+  closeTime   String   // "HH:mm" 24h format
+  isClosed    Boolean  @default(false)
+  isSplitShift Boolean @default(false)
+
+  @@index([branchId, dayOfWeek])
+  @@map("branch_operating_hours")
+}
+
+model AtmosphereTag {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+
+  branches BranchAtmosphere[]
+
+  @@map("atmosphere_tags")
+}
+
+model BranchAtmosphere {
+  branchId        String
+  atmosphereTagId String
+  branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  atmosphereTag   AtmosphereTag @relation(fields: [atmosphereTagId], references: [id], onDelete: Cascade)
+
+  @@id([branchId, atmosphereTagId])
+  @@map("branch_atmospheres")
+}
+
+// ==========================================
+// MENU & DISH
+// ==========================================
+
+model Menu {
+  id            String       @id @default(uuid())
+  restaurantId  String
+  restaurant    Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  branchId      String?
+  branch        Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  name          String
+  description   String?
+  status        RecordStatus @default(ACTIVE)
+  source        String       @default("MANUAL")
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  dishes Dish[]
+
+  @@index([restaurantId])
+  @@index([branchId])
+  @@map("menus")
+}
+
+model Dish {
+  id                 String             @id @default(uuid())
+  menuId             String
+  menu               Menu               @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  name               String
+  slug               String
+  description        String?
+  price              Float
+  currency           String             @default("EGP")
+  imageUrl           String?
+  status             RecordStatus       @default(ACTIVE)
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  lastVerifiedAt     DateTime?
+  source             String             @default("MANUAL")
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  attributes   DishAttribute?
+  categories   DishCategoryAssignment[]
+  ingredients  DishIngredient[]
+  tags         DishTag[]
+  priceHistory DishPriceHistory[]
+  interactions UserInteraction[]
+
+  @@index([menuId])
+  @@index([status, price])
+  @@map("dishes")
+}
+
+model DishCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+
+  dishes DishCategoryAssignment[]
+
+  @@map("dish_categories")
+}
+
+model DishCategoryAssignment {
+  dishId     String
+  categoryId String
+  dish       Dish         @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  category   DishCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([dishId, categoryId])
+  @@map("dish_category_assignments")
+}
+
+model DishAttribute {
+  id                  String               @id @default(uuid())
+  dishId              String               @unique
+  dish                Dish                 @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  tasteAttributes     TasteAttribute[]     @default([])
+  textures            String[]             @default([])
+  mealCharacteristics MealCharacteristic[] @default([])
+  dietaryProperties   DietaryProperty[]    @default([])
+
+  @@map("dish_attributes")
+}
+
+model Ingredient {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+
+  dishes DishIngredient[]
+
+  @@map("ingredients")
+}
+
+model DishIngredient {
+  dishId       String
+  ingredientId String
+  isOptional   Boolean    @default(false)
+  isAllergen   Boolean    @default(false)
+  dish         Dish       @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@id([dishId, ingredientId])
+  @@map("dish_ingredients")
+}
+
+model FoodTag {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+
+  dishes DishTag[]
+
+  @@map("food_tags")
+}
+
+model DishTag {
+  dishId String
+  tagId  String
+  dish   Dish    @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  tag    FoodTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([dishId, tagId])
+  @@map("dish_tags")
+}
+
+model DishPriceHistory {
+  id            String    @id @default(uuid())
+  dishId        String
+  dish          Dish      @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  price         Float
+  currency      String    @default("EGP")
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  source        String    @default("MANUAL")
+
+  @@index([dishId, effectiveFrom])
+  @@map("dish_price_history")
+}
