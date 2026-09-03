@@ -30,7 +30,7 @@ export default function DishDetailsScreen() {
   const isSaved = useMemo(
     () =>
       !!dish?.id &&
-      (savedInteractions?.data ?? []).some((i) => i.dishId === dish.id),
+      (savedInteractions ?? []).some((i) => i.dishId === dish.id),
     [savedInteractions, dish?.id]
   );
 

@@ -36,7 +36,7 @@ Enums: `TasteAttribute`, `MealCharacteristic`, `DietaryProperty`, `InteractionTy
 
 ## Critical
 
-### CR-01: Double-unwrapping paginated responses — every list endpoint returns `undefined`
+### CR-01: ✅ FIXED — Double-unwrapping paginated responses — every list endpoint returns `undefined`
 
 `request()` already unwraps the backend envelope: it returns `json.data` (mobile/src/lib/api.ts:126-133). For list endpoints the backend puts the **array** in `data` and pagination in `meta` (backend/src/modules/dishes/controller.ts:10-18). But `getDishes`/`searchDishes`/`getMyInteractions` are typed `Paginated<T>` and callers read `.data` again:
 

@@ -53,7 +53,7 @@ export default function SavedScreen() {
 
   // Local optimistic list of removed ids so the UI updates instantly.
   const [removedIds, setRemovedIds] = useState<string[]>([]);
-  useEffect(() => setRemovedIds([]), [interactions?.data?.length]);
+  useEffect(() => setRemovedIds([]), [interactions?.length]);
 
   function unsave(dishId: string) {
     setRemovedIds((prev) => [...prev, dishId]);
