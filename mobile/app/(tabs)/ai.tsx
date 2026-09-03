@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -30,24 +30,42 @@ export default function AiScreen() {
   const [query, setQuery] = useState("");
   const [activePrompt, setActivePrompt] = useState<number | null>(null);
   const [maxPrice, setMaxPrice] = useState<string>("");
+  // Requests fire only on explicit action (submit / prompt tap), never on
+  // keystroke — POSTing /recommendations per character would burn the AI
+  // rate limit and provider budget (CR-04).
+  const [submitted, setSubmitted] = useState<RecommendationRequest | null>(
+    null
+  );
 
-  const payload = useMemo<RecommendationRequest | null>(() => {
+  function buildPayload(promptIdx: number | null): RecommendationRequest | null {
     const trimmedQuery = query.trim();
-    if (!trimmedQuery && activePrompt === null) return null;
+    if (!trimmedQuery && promptIdx === null) return null;
+    const parsedPrice = maxPrice.trim() ? Number(maxPrice) : NaN;
     const base: RecommendationRequest = {
       query: trimmedQuery || undefined,
-      maxPrice: maxPrice ? Number(maxPrice) : undefined,
+      maxPrice:
+        Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : undefined,
       limit: 6,
     };
-    if (activePrompt !== null) {
-      return { ...base, ...QUICK_PROMPTS[activePrompt].payload };
-    }
-    return base;
-  }, [query, activePrompt, maxPrice]);
+    return promptIdx !== null
+      ? { ...base, ...QUICK_PROMPTS[promptIdx].payload }
+      : base;
+  }
 
-  const { data, isLoading, isError, error } = useRecommendations(
-    payload ?? { limit: 6 }
-  );
+  function handleSubmit() {
+    const request = buildPayload(activePrompt);
+    if (request) setSubmitted(request);
+  }
+
+  function togglePrompt(idx: number) {
+    const next = activePrompt === idx ? null : idx;
+    setActivePrompt(next);
+    const request = buildPayload(next);
+    if (request) setSubmitted(request);
+    else if (next === null) setSubmitted(null);
+  }
+
+  const { data, isLoading, isError, error } = useRecommendations(submitted);
 
   const recs = data?.recommendations ?? [];
 
@@ -72,6 +90,8 @@ export default function AiScreen() {
           className="bg-white border border-neutral-200 rounded-2xl px-4 py-3 text-sm text-neutral-900"
           multiline
           numberOfLines={2}
+          returnKeyType="search"
+          onSubmitEditing={handleSubmit}
         />
         <View className="flex-row items-center gap-2">
           <Text className="text-xs text-neutral-500">Max price (optional)</Text>
@@ -84,6 +104,12 @@ export default function AiScreen() {
             className="bg-white border border-neutral-200 rounded-full px-3 h-9 text-sm text-neutral-900 min-w-[80px]"
           />
           <Text className="text-xs text-neutral-500">EGP</Text>
+          <Pressable
+            onPress={handleSubmit}
+            className="ml-auto bg-brand-500 rounded-full px-4 h-9 items-center justify-center"
+          >
+            <Text className="text-white text-xs font-semibold">Find dishes</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -93,7 +119,7 @@ export default function AiScreen() {
           return (
             <Pressable
               key={p.label}
-              onPress={() => setActivePrompt(isActive ? null : i)}
+              onPress={() => togglePrompt(i)}
               className={cn(
                 "px-3 py-1.5 rounded-full border",
                 isActive
@@ -130,7 +156,7 @@ export default function AiScreen() {
             "The AI service may be rate-limited — try again in a minute."
           }
         />
-      ) : payload === null ? (
+      ) : submitted === null ? (
         <EmptyState
           icon="✨"
           title="What are you craving?"

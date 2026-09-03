@@ -92,7 +92,7 @@ export interface RecommendationResponse {
 
 Then render `item.dish.name`, `item.dish.price`, `item.restaurant.name`, `item.reason` (adapt DishCard or add a RecommendationCard component).
 
-### CR-04: Recommendation POST fires on mount and on every keystroke — AI rate limit and cost burn
+### CR-04: ✅ FIXED — Recommendation POST fires on mount and on every keystroke — AI rate limit and cost burn
 
 `ai.tsx:52-54` calls `useRecommendations(payload ?? { limit: 6 })`, so the query is never given `null`; `enabled: !!payload` (mobile/src/lib/queries.ts:90) is always true for an object. Result: `POST /recommendations` runs on first mount, and again for **every keystroke** (each character changes the queryKey → new request → AI intent extraction). The backend's `aiRateLimiter` allows 20 requests/15min (backend/src/config/env.ts AI_RATE_LIMIT_MAX) — typing one sentence exhausts it, after which the screen shows the rate-limit empty state.
 

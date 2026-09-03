@@ -83,11 +83,13 @@ export function useDishSearch(query: string) {
   });
 }
 
-export function useRecommendations(payload: RecommendationRequest) {
+export function useRecommendations(payload: RecommendationRequest | null) {
   return useQuery({
-    queryKey: queryKeys.recommendations(payload),
-    queryFn: () => getRecommendations(payload),
-    enabled: !!payload,
+    queryKey: payload
+      ? queryKeys.recommendations(payload)
+      : (["recommendations"] as const),
+    queryFn: () => getRecommendations(payload as RecommendationRequest),
+    enabled: payload != null,
     staleTime: 5 * 60_000,
   });
 }
