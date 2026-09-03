@@ -77,9 +77,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="ai"
         options={{
-          title: "AI",
+          title: "Explore",
           tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} glyph="✨" label="AI" />
+            <TabIcon focused={focused} glyph="🧭" label="Explore" />
           ),
         }}
       />

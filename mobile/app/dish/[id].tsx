@@ -1,6 +1,12 @@
 import { Stack, useLocalSearchParams, Link } from "expo-router";
 import { Image } from "expo-image";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -10,12 +16,22 @@ import {
   useUnsaveDish,
 } from "@/lib/queries";
 import { useAuthStore, selectIsSignedIn } from "@/lib/auth-store";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { cn } from "@/lib/cn";
 
 function formatPrice(value: number, currency: string) {
   return `${value.toFixed(0)} ${currency}`;
 }
 
+const SPICE_LEVELS = ["Mild", "Medium", "Hot"] as const;
+
+/**
+ * Dish Detail: hero with overlay actions, info, taste/dietary/ingredient
+ * chips, AI explanation — plus a "Customize" panel (portion stepper,
+ * spice level, toppings, side options) modeled on the Figma product-5
+ * screen. Customization is client-side only: it expresses the diner's
+ * preference, nothing is sent to the backend.
+ */
 export default function DishDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -23,6 +39,10 @@ export default function DishDetailsScreen() {
   const recordInteraction = useRecordInteraction();
   const unsaveDish = useUnsaveDish();
   const isSignedIn = useAuthStore(selectIsSignedIn);
+
+  const [portion, setPortion] = useState(1);
+  const [spice, setSpice] = useState<(typeof SPICE_LEVELS)[number]>("Medium");
+  const [toppings, setToppings] = useState<string[]>([]);
 
   // Fetch the user's saved interactions to know if THIS dish is saved.
   const { data: savedInteractions } = useMyInteractions({
@@ -61,9 +81,15 @@ export default function DishDetailsScreen() {
     }
   }
 
+  function toggleTopping(ing: string) {
+    setToppings((prev) =>
+      prev.includes(ing) ? prev.filter((t) => t !== ing) : [...prev, ing]
+    );
+  }
+
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
+      <View className="flex-1 items-center justify-center bg-[#FFF8F1]">
         <Stack.Screen options={{ title: "Loading…" }} />
         <ActivityIndicator size="large" color="#f97316" />
       </View>
@@ -72,7 +98,7 @@ export default function DishDetailsScreen() {
 
   if (isError || !dish) {
     return (
-      <View className="flex-1 items-center justify-center bg-white px-6">
+      <View className="flex-1 items-center justify-center bg-[#FFF8F1] px-6">
         <Stack.Screen options={{ title: "Not found" }} />
         <Text className="text-5xl mb-2">⚠️</Text>
         <Text className="text-lg font-semibold text-neutral-900 text-center">
@@ -93,76 +119,241 @@ export default function DishDetailsScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-white"
+      className="flex-1 bg-[#FFF8F1]"
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+      showsVerticalScrollIndicator={false}
     >
-      <Stack.Screen
-        options={{
-          title: dish.name,
-          headerRight: () =>
-            isSignedIn ? (
-              <Pressable
-                onPress={toggleSave}
-                hitSlop={8}
-                className="px-2 py-1"
+      <Stack.Screen options={{ title: dish.name }} />
+
+      {/* Hero with overlay actions */}
+      <View>
+        <Image
+          source={{ uri: dish.imageUrl }}
+          className="w-full h-80 bg-brand-100"
+          contentFit="cover"
+          transition={200}
+        />
+        <View
+          className="absolute flex-row justify-between w-full px-5"
+          style={{ top: insets.top + 8 }}
+        >
+          <Link href="/(tabs)" asChild>
+            <Pressable className="w-10 h-10 rounded-full bg-white/95 items-center justify-center">
+              <Text className="text-lg text-neutral-900">←</Text>
+            </Pressable>
+          </Link>
+          {isSignedIn ? (
+            <Pressable
+              onPress={toggleSave}
+              hitSlop={8}
+              className="w-10 h-10 rounded-full bg-white/95 items-center justify-center"
+            >
+              <Text
+                className={cn(
+                  "text-xl",
+                  isSaved ? "text-red-500" : "text-neutral-400"
+                )}
               >
-                <Text
-                  className={isSaved ? "text-red-500 text-xl" : "text-neutral-400 text-xl"}
-                >
-                  {isSaved ? "♥" : "♡"}
+                {isSaved ? "♥" : "♡"}
+              </Text>
+            </Pressable>
+          ) : (
+            <Link href="/auth" asChild>
+              <Pressable className="h-10 rounded-full bg-white/95 items-center justify-center px-4">
+                <Text className="text-xs text-brand-600 font-semibold">
+                  Sign in
                 </Text>
               </Pressable>
-            ) : (
-              <Link href="/auth" asChild>
-                <Pressable hitSlop={8} className="px-2 py-1">
-                  <Text className="text-sm text-brand-600 font-semibold">
-                    Sign in
-                  </Text>
-                </Pressable>
-              </Link>
-            ),
-        }}
-      />
-
-      <Image
-        source={{ uri: dish.imageUrl }}
-        className="w-full h-72 bg-neutral-100"
-        contentFit="cover"
-        transition={200}
-      />
-
-      <View className="px-5 pt-4 gap-3">
-        <View>
-          <Text className="text-2xl font-bold text-neutral-900">
-            {dish.name}
-          </Text>
-          <Text className="text-sm text-neutral-500 mt-1">
-            {dish.restaurantName}
-            {dish.branchName ? ` · ${dish.branchName}` : ""}
-          </Text>
+            </Link>
+          )}
         </View>
+      </View>
 
-        <View className="flex-row items-center justify-between">
-          <Text className="text-2xl font-bold text-brand-600">
-            {formatPrice(dish.price, dish.currency)}
-          </Text>
-          {typeof dish.rating === "number" ? (
-            <View className="flex-row items-center gap-1">
-              <Text>★</Text>
-              <Text className="text-sm text-neutral-700">
-                {dish.rating.toFixed(1)}
-                {dish.reviewCount && dish.reviewCount > 0 ? ` · ${dish.reviewCount} reviews` : ""}
+      {/* Info card overlapping the hero */}
+      <View className="px-5 -mt-6">
+        <View
+          className="bg-white rounded-3xl border border-neutral-200 p-4 gap-2"
+          style={{ boxShadow: "0 4px 12px rgba(0, 0, 0, 0.06)" }}
+        >
+          <View className="flex-row items-start justify-between gap-2">
+            <View className="flex-1">
+              <Text className="text-xl font-bold text-neutral-900">
+                {dish.name}
               </Text>
+              <Text className="text-xs text-neutral-500 mt-0.5">
+                {dish.restaurantName}
+                {dish.branchName ? ` · ${dish.branchName}` : ""}
+              </Text>
+            </View>
+            <Text className="text-xl font-bold text-brand-600">
+              {formatPrice(dish.price, dish.currency)}
+            </Text>
+          </View>
+
+          <View className="flex-row items-center gap-3">
+            {typeof dish.rating === "number" ? (
+              <View className="flex-row items-center gap-1">
+                <Text className="text-sm text-amber-500">★</Text>
+                <Text className="text-xs font-semibold text-neutral-700">
+                  {dish.rating.toFixed(1)}
+                  {dish.reviewCount && dish.reviewCount > 0
+                    ? ` · ${dish.reviewCount} reviews`
+                    : ""}
+                </Text>
+              </View>
+            ) : null}
+            <View className="bg-brand-50 px-2.5 py-1 rounded-full border border-brand-100">
+              <Text className="text-[11px] text-brand-700 font-medium">
+                {dish.cuisine}
+              </Text>
+            </View>
+            {typeof dish.calories === "number" ? (
+              <Text className="text-[11px] text-neutral-500">
+                {dish.calories} kcal
+              </Text>
+            ) : null}
+            {typeof dish.prepTimeMinutes === "number" ? (
+              <Text className="text-[11px] text-neutral-500">
+                · {dish.prepTimeMinutes} min
+              </Text>
+            ) : null}
+          </View>
+
+          {dish.description ? (
+            <Text className="text-sm text-neutral-700 leading-5">
+              {dish.description}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+
+      <View className="px-5 pt-4 gap-4">
+        {/* Customize panel (from Figma product-5 screen) */}
+        <View className="gap-3">
+          <Text className="text-lg font-bold text-neutral-900">
+            Customize to your taste
+          </Text>
+
+          {/* Portion stepper */}
+          <View className="flex-row items-center justify-between bg-white rounded-2xl border border-neutral-200 px-4 py-3">
+            <Text className="text-sm font-semibold text-neutral-800">
+              Portion
+            </Text>
+            <View className="flex-row items-center gap-3">
+              <Pressable
+                onPress={() => setPortion((p) => Math.max(1, p - 1))}
+                className="w-8 h-8 rounded-full bg-neutral-100 items-center justify-center active:opacity-70"
+              >
+                <Text className="text-base text-neutral-700">−</Text>
+              </Pressable>
+              <Text className="text-base font-bold text-neutral-900 min-w-[20px] text-center">
+                {portion}
+              </Text>
+              <Pressable
+                onPress={() => setPortion((p) => Math.min(9, p + 1))}
+                className="w-8 h-8 rounded-full bg-brand-500 items-center justify-center active:opacity-85"
+              >
+                <Text className="text-base text-white">+</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Spice level */}
+          <View className="bg-white rounded-2xl border border-neutral-200 px-4 py-3 gap-2">
+            <Text className="text-sm font-semibold text-neutral-800">
+              Spice level
+            </Text>
+            <View className="flex-row gap-2">
+              {SPICE_LEVELS.map((level) => {
+                const active = spice === level;
+                return (
+                  <Pressable
+                    key={level}
+                    onPress={() => setSpice(level)}
+                    className={cn(
+                      "flex-1 py-2 rounded-full border items-center",
+                      active
+                        ? "bg-brand-500 border-brand-500"
+                        : "bg-white border-neutral-200"
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        "text-xs font-semibold",
+                        active ? "text-white" : "text-neutral-600"
+                      )}
+                    >
+                      {level === "Mild" ? "🌱 " : level === "Medium" ? "🌶 " : "🔥 "}
+                      {level}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Toppings from ingredients */}
+          {dish.ingredients.length > 0 ? (
+            <View className="gap-2">
+              <Text className="text-sm font-semibold text-neutral-800">
+                Toppings
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                {dish.ingredients.map((ing) => {
+                  const selected = toppings.includes(ing);
+                  return (
+                    <Pressable
+                      key={ing}
+                      onPress={() => toggleTopping(ing)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-full border",
+                        selected
+                          ? "bg-brand-500 border-brand-500"
+                          : "bg-white border-neutral-200"
+                      )}
+                    >
+                      <Text
+                        className={cn(
+                          "text-xs font-medium",
+                          selected ? "text-white" : "text-neutral-700"
+                        )}
+                      >
+                        {selected ? "✓ " : ""}
+                        {ing}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+
+          {/* Side options from tags */}
+          {dish.tags.length > 0 ? (
+            <View className="gap-2">
+              <Text className="text-sm font-semibold text-neutral-800">
+                Side options
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8 }}
+              >
+                {dish.tags.map((tag) => (
+                  <View
+                    key={tag}
+                    className="bg-white px-3.5 py-2 rounded-2xl border border-neutral-200"
+                  >
+                    <Text className="text-xs text-neutral-700 font-medium">
+                      {tag}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
             </View>
           ) : null}
         </View>
-
-        {dish.description ? (
-          <Text className="text-sm text-neutral-700 leading-5">
-            {dish.description}
-          </Text>
-        ) : null}
 
         {dish.tasteAttributes.length > 0 && (
           <View>
@@ -204,58 +395,14 @@ export default function DishDetailsScreen() {
           </View>
         )}
 
-        {dish.ingredients.length > 0 && (
-          <View>
-            <Text className="text-xs font-semibold text-neutral-500 uppercase mb-2">
-              Ingredients
-            </Text>
-            <View className="flex-row flex-wrap gap-2">
-              {dish.ingredients.map((ing) => (
-                <View
-                  key={ing}
-                  className="bg-neutral-100 px-3 py-1 rounded-full"
-                >
-                  <Text className="text-xs text-neutral-700">{ing}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
         {dish.aiExplanation ? (
-          <View className="mt-2 p-3 rounded-2xl bg-brand-50 border border-brand-100">
-            <Text className="text-xs font-semibold text-brand-700 uppercase mb-1">
-              Why this dish?
+          <View className="p-4 rounded-3xl bg-neutral-900">
+            <Text className="text-xs font-semibold text-amber-400 uppercase mb-1">
+              ✨ Why this dish?
             </Text>
-            <Text className="text-sm text-neutral-800 leading-5">
+            <Text className="text-sm text-neutral-100 leading-5">
               {dish.aiExplanation}
             </Text>
-          </View>
-        ) : null}
-
-        {typeof dish.calories === "number" ||
-        typeof dish.prepTimeMinutes === "number" ? (
-          <View className="flex-row gap-4 mt-2">
-            {typeof dish.calories === "number" ? (
-              <View className="flex-1 bg-neutral-50 p-3 rounded-xl border border-neutral-100">
-                <Text className="text-[10px] text-neutral-500 uppercase">
-                  Calories
-                </Text>
-                <Text className="text-base font-semibold text-neutral-900">
-                  {dish.calories} kcal
-                </Text>
-              </View>
-            ) : null}
-            {typeof dish.prepTimeMinutes === "number" ? (
-              <View className="flex-1 bg-neutral-50 p-3 rounded-xl border border-neutral-100">
-                <Text className="text-[10px] text-neutral-500 uppercase">
-                  Prep time
-                </Text>
-                <Text className="text-base font-semibold text-neutral-900">
-                  {dish.prepTimeMinutes} min
-                </Text>
-              </View>
-            ) : null}
           </View>
         ) : null}
       </View>

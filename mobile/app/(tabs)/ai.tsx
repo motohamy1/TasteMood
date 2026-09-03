@@ -7,13 +7,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useRecommendations } from "@/lib/queries";
 import { RecommendationCard } from "@/components/recommendation-card";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
 import { EmptyState } from "@/components/empty-state";
+import { SectionHeader } from "@/components/section-header";
 import { cn } from "@/lib/cn";
 import type { RecommendationRequest } from "@/types/recommendation";
 
@@ -25,24 +25,43 @@ const QUICK_PROMPTS: Array<{ label: string; payload: Partial<RecommendationReque
   { label: "🎲 Surprise me", payload: { surpriseMe: true } },
 ];
 
-export default function AiScreen() {
+const MOODS: Array<{ emoji: string; label: string; query: string }> = [
+  { emoji: "🔥", label: "Spicy", query: "something spicy with bold flavors" },
+  { emoji: "🥗", label: "Light", query: "something light and healthy" },
+  { emoji: "🍔", label: "Comfort", query: "comfort food, rich and filling" },
+  { emoji: "🍰", label: "Sweet", query: "a sweet dessert" },
+  { emoji: "🌱", label: "Vegan", query: "vegan dish" },
+  { emoji: "🌙", label: "Late night", query: "quick late night snack" },
+];
+
+/**
+ * Explore: browse by mood tiles or describe a craving — powered by the
+ * AI recommendations engine. Requests fire only on explicit action
+ * (submit / tile / prompt tap), never on keystroke — POSTing
+ * /recommendations per character would burn the AI rate limit and
+ * provider budget (CR-04).
+ */
+export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [activePrompt, setActivePrompt] = useState<number | null>(null);
+  const [activeMood, setActiveMood] = useState<number | null>(null);
   const [maxPrice, setMaxPrice] = useState<string>("");
-  // Requests fire only on explicit action (submit / prompt tap), never on
-  // keystroke — POSTing /recommendations per character would burn the AI
-  // rate limit and provider budget (CR-04).
   const [submitted, setSubmitted] = useState<RecommendationRequest | null>(
     null
   );
 
-  function buildPayload(promptIdx: number | null): RecommendationRequest | null {
+  function buildPayload(
+    promptIdx: number | null,
+    moodIdx: number | null
+  ): RecommendationRequest | null {
     const trimmedQuery = query.trim();
-    if (!trimmedQuery && promptIdx === null) return null;
+    if (!trimmedQuery && promptIdx === null && moodIdx === null) return null;
     const parsedPrice = maxPrice.trim() ? Number(maxPrice) : NaN;
     const base: RecommendationRequest = {
-      query: trimmedQuery || undefined,
+      query:
+        trimmedQuery ||
+        (moodIdx !== null ? MOODS[moodIdx].query : undefined),
       maxPrice:
         Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : undefined,
       limit: 6,
@@ -53,16 +72,26 @@ export default function AiScreen() {
   }
 
   function handleSubmit() {
-    const request = buildPayload(activePrompt);
+    const request = buildPayload(activePrompt, activeMood);
     if (request) setSubmitted(request);
   }
 
   function togglePrompt(idx: number) {
     const next = activePrompt === idx ? null : idx;
     setActivePrompt(next);
-    const request = buildPayload(next);
+    if (next !== null) setActiveMood(null);
+    const request = buildPayload(next, next !== null ? null : activeMood);
     if (request) setSubmitted(request);
-    else if (next === null) setSubmitted(null);
+    else if (next === null && activeMood === null) setSubmitted(null);
+  }
+
+  function toggleMood(idx: number) {
+    const next = activeMood === idx ? null : idx;
+    setActiveMood(next);
+    if (next !== null) setActivePrompt(null);
+    const request = buildPayload(null, next);
+    if (request) setSubmitted(request);
+    else setSubmitted(null);
   }
 
   const { data, isLoading, isError, error } = useRecommendations(submitted);
@@ -71,17 +100,59 @@ export default function AiScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-brand-50"
-      contentContainerClassName="px-4 gap-3"
-      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 32 }}
+      className="flex-1 bg-[#FFF8F1]"
+      contentContainerStyle={{
+        paddingTop: insets.top + 12,
+        paddingBottom: 96,
+        gap: 16,
+      }}
       contentInsetAdjustmentBehavior="automatic"
+      showsVerticalScrollIndicator={false}
     >
-      <Text className="text-2xl font-bold text-neutral-900">AI Chef</Text>
-      <Text className="text-sm text-neutral-600">
-        Describe a craving or pick a mood — we&apos;ll suggest dishes.
-      </Text>
+      <View className="px-5 gap-1">
+        <Text className="text-2xl font-bold text-neutral-900">Explore</Text>
+        <Text className="text-sm text-neutral-600">
+          Pick a mood or describe a craving — AI does the rest.
+        </Text>
+      </View>
 
-      <View className="gap-2 mt-2">
+      {/* Mood tiles */}
+      <View className="gap-2">
+        <View className="px-5">
+          <SectionHeader title="Browse by mood" />
+        </View>
+        <View className="px-5 flex-row flex-wrap gap-2">
+          {MOODS.map((m, i) => {
+            const isActive = i === activeMood;
+            return (
+              <Pressable
+                key={m.label}
+                onPress={() => toggleMood(i)}
+                className={cn(
+                  "flex-row items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border",
+                  isActive
+                    ? "bg-neutral-900 border-neutral-900"
+                    : "bg-white border-neutral-200"
+                )}
+              >
+                <Text className="text-base">{m.emoji}</Text>
+                <Text
+                  className={cn(
+                    "text-xs font-semibold",
+                    isActive ? "text-white" : "text-neutral-800"
+                  )}
+                >
+                  {m.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* AI chef input */}
+      <View className="px-5 gap-2">
+        <SectionHeader title="Ask the AI chef" />
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -94,7 +165,7 @@ export default function AiScreen() {
           onSubmitEditing={handleSubmit}
         />
         <View className="flex-row items-center gap-2">
-          <Text className="text-xs text-neutral-500">Max price (optional)</Text>
+          <Text className="text-xs text-neutral-500">Max price</Text>
           <TextInput
             value={maxPrice}
             onChangeText={setMaxPrice}
@@ -106,77 +177,83 @@ export default function AiScreen() {
           <Text className="text-xs text-neutral-500">EGP</Text>
           <Pressable
             onPress={handleSubmit}
-            className="ml-auto bg-brand-500 rounded-full px-4 h-9 items-center justify-center"
+            className="ml-auto bg-brand-500 rounded-full px-4 h-9 items-center justify-center active:opacity-85"
           >
             <Text className="text-white text-xs font-semibold">Find dishes</Text>
           </Pressable>
         </View>
-      </View>
 
-      <View className="flex-row flex-wrap gap-2 mt-1">
-        {QUICK_PROMPTS.map((p, i) => {
-          const isActive = i === activePrompt;
-          return (
-            <Pressable
-              key={p.label}
-              onPress={() => togglePrompt(i)}
-              className={cn(
-                "px-3 py-1.5 rounded-full border",
-                isActive
-                  ? "bg-brand-500 border-brand-500"
-                  : "bg-white border-neutral-200"
-              )}
-            >
-              <Text
+        <View className="flex-row flex-wrap gap-2">
+          {QUICK_PROMPTS.map((p, i) => {
+            const isActive = i === activePrompt;
+            return (
+              <Pressable
+                key={p.label}
+                onPress={() => togglePrompt(i)}
                 className={cn(
-                  "text-xs font-medium",
-                  isActive ? "text-white" : "text-neutral-700"
+                  "px-3 py-1.5 rounded-full border",
+                  isActive
+                    ? "bg-brand-500 border-brand-500"
+                    : "bg-white border-neutral-200"
                 )}
               >
-                {p.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <Text
+                  className={cn(
+                    "text-xs font-medium",
+                    isActive ? "text-white" : "text-neutral-700"
+                  )}
+                >
+                  {p.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
-      {isLoading ? (
-        <View className="gap-3 mt-2">
-          <ActivityIndicator color="#f97316" />
-          <View className="flex-row flex-wrap gap-3">
-            <DishSkeletonGrid count={4} />
-          </View>
-        </View>
-      ) : isError ? (
-        <EmptyState
-          icon="⚠️"
-          title="Couldn't get recommendations"
-          description={
-            (error as Error)?.message ??
-            "The AI service may be rate-limited — try again in a minute."
-          }
-        />
-      ) : submitted === null ? (
-        <EmptyState
-          icon="✨"
-          title="What are you craving?"
-          description="Type a request or tap a mood above to get started."
-        />
-      ) : recs.length === 0 ? (
-        <EmptyState
-          icon="🤔"
-          title="No matches"
-          description="Try loosening your filters."
-        />
-      ) : (
-        <View className="flex-row flex-wrap gap-3 mt-2">
-          {recs.map((item) => (
-            <View key={item.dish.id} className="basis-[48%] flex-1">
-              <RecommendationCard item={item} />
+      {/* Results */}
+      <View className="px-5">
+        {isLoading ? (
+          <View className="gap-3">
+            <ActivityIndicator color="#f97316" />
+            <View className="flex-row flex-wrap gap-3">
+              <DishSkeletonGrid count={4} />
             </View>
-          ))}
-        </View>
-      )}
+          </View>
+        ) : isError ? (
+          <EmptyState
+            icon="⚠️"
+            title="Couldn't get recommendations"
+            description={
+              (error as Error)?.message ??
+              "The AI service may be rate-limited — try again in a minute."
+            }
+          />
+        ) : submitted === null ? (
+          <EmptyState
+            icon="🧭"
+            title="What are you craving?"
+            description="Tap a mood or type a request to get started."
+          />
+        ) : recs.length === 0 ? (
+          <EmptyState
+            icon="🤔"
+            title="No matches"
+            description="Try loosening your filters."
+          />
+        ) : (
+          <View className="gap-2">
+            <SectionHeader title="For you" />
+            <View className="flex-row flex-wrap gap-3">
+              {recs.map((item) => (
+                <View key={item.dish.id} className="basis-[48%] flex-1">
+                  <RecommendationCard item={item} />
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
     </ScrollView>
   );
 }

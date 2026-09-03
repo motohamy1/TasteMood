@@ -54,6 +54,15 @@ export default function RootLayout() {
           >
             <Stack.Screen name="(tabs)" />
             <Stack.Screen
+              name="dishes"
+              options={{
+                headerShown: true,
+                title: "All dishes",
+                headerBackTitle: "Back",
+                presentation: "card",
+              }}
+            />
+            <Stack.Screen
               name="dish/[id]"
               options={{
                 headerShown: true,
