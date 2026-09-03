@@ -15,7 +15,8 @@ export interface UserProfile {
   updatedAt?: string;
 }
 
-export type PriceRange = "BUDGET" | "MID_RANGE" | "PREMIUM" | "LUXURY";
+/** Mirrors backend PriceRange enum (prisma schema + preferences zod schema). */
+export type PriceRange = "BUDGET" | "MODERATE" | "EXPENSIVE" | "LUXURY";
 
 /** Mirrors backend prisma `model UserPreferenceProfile`. */
 export interface UserPreferences {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   RefreshControl,
@@ -30,13 +30,21 @@ export default function HomeScreen() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
 
+  // Debounce the raw input into the query params (WR-03): without this every
+  // keystroke is a new /dishes request and burns the rate-limit budget.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const params = useMemo(
     () => ({
-      search: search.trim() || undefined,
+      search: debouncedSearch || undefined,
       cuisine: category !== "All" ? category : undefined,
       limit: 20,
     }),
-    [search, category]
+    [debouncedSearch, category]
   );
 
   const { data, isLoading, isError, error, refetch, isRefetching } =

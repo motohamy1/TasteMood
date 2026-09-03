@@ -56,7 +56,7 @@ export class ApiError extends Error {
 
 export class AuthError extends ApiError {
   constructor(message = "Authentication required") {
-    super(message, 401, "UNAUTHENTICATED");
+    super(message, 401, "UNAUTHORIZED");
     this.name = "AuthError";
   }
 }
@@ -105,9 +105,11 @@ async function request<T>(
     let code: string | undefined;
     try {
       const errorBody = await response.json();
-      if (errorBody?.message) message = errorBody.message;
+      // Backend shape: { success: false, error: { code, message, details } }
       if (errorBody?.error?.message) message = errorBody.error.message;
-      if (errorBody?.code) code = errorBody.code;
+      else if (errorBody?.message) message = errorBody.message;
+      if (errorBody?.error?.code) code = errorBody.error.code;
+      else if (errorBody?.code) code = errorBody.code;
     } catch {
       // body wasn't JSON; keep default message
     }

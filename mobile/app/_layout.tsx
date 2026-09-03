@@ -2,27 +2,40 @@ import "../src/global.css";
 
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryCache,
+  MutationCache,
+} from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useEffect, useMemo } from "react";
 
+import { AuthError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 
 export default function RootLayout() {
-  const queryClient = useMemo(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            retry: 1,
-            staleTime: 30_000,
-            refetchOnWindowFocus: false,
-          },
+  const queryClient = useMemo(() => {
+    // Session expiry (WR-06): any authed call rejecting with 401 means the
+    // stored token is dead — sign out instead of failing silently forever.
+    const onAuthError = (error: Error) => {
+      if (error instanceof AuthError) {
+        void useAuthStore.getState().signOut();
+      }
+    };
+    return new QueryClient({
+      queryCache: new QueryCache({ onError: onAuthError }),
+      mutationCache: new MutationCache({ onError: onAuthError }),
+      defaultOptions: {
+        queries: {
+          retry: 1,
+          staleTime: 30_000,
+          refetchOnWindowFocus: false,
         },
-      }),
-    []
-  );
+      },
+    });
+  }, []);
 
   const hydrate = useAuthStore((s) => s.hydrate);
   useEffect(() => {

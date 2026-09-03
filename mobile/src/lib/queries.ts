@@ -24,6 +24,7 @@ import type { Dish, DishSummary } from "@/types/dish";
 import type { RecommendationRequest } from "@/types/recommendation";
 import type { InteractionType } from "@/types/interaction";
 import type { UserPreferences } from "@/types/user";
+import { useAuthStore, selectIsSignedIn } from "@/lib/auth-store";
 
 export const queryKeys = {
   dishes: (params: Parameters<typeof getDishes>[0] = {}) =>
@@ -127,17 +128,22 @@ export function useMyInteractions(params: {
   page?: number;
   limit?: number;
 } = {}) {
+  // Auth-required endpoint — never fire it (and get a 401) for guests.
+  const isSignedIn = useAuthStore(selectIsSignedIn);
   return useQuery({
     queryKey: queryKeys.interactions(params),
     queryFn: () => getMyInteractions(params),
+    enabled: isSignedIn,
     staleTime: 30_000,
   });
 }
 
 export function useMyPreferences() {
+  const isSignedIn = useAuthStore(selectIsSignedIn);
   return useQuery({
     queryKey: queryKeys.preferences,
     queryFn: () => getMyPreferences(),
+    enabled: isSignedIn,
   });
 }
 

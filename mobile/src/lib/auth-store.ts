@@ -16,7 +16,7 @@
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 
-import { setAuthToken, getMe } from "./api";
+import { setAuthToken, getMe, AuthError } from "./api";
 import type { UserProfile } from "@/types/user";
 
 const TOKEN_KEY = "tastemood.auth.token";
@@ -71,8 +71,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const user = await getMe();
       set({ user, status: "signed-in" });
     } catch (err) {
+      if (err instanceof AuthError) {
+        // Stored token is dead/expired — clear it so we don't stay stuck
+        // "signed in" while every authed call 401s (WR-06).
+        if (__DEV__) console.warn("[auth] token rejected on hydrate, signing out", err);
+        setAuthToken(null);
+        await writeTokenToSecureStore(null);
+        set({ token: null, user: null, status: "signed-out" });
+        return;
+      }
       if (__DEV__) console.warn("[auth] getMe failed during hydrate", err);
-      // Keep the token but drop the user — UI can prompt to re-auth.
+      // Network/other failure: keep the token but drop the user — the
+      // UI can prompt to retry.
       set({ user: null });
     }
   },
@@ -86,10 +96,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const user = await getMe();
       set({ user });
     } catch (err) {
-      set({
-        status: "error",
-        error: err instanceof Error ? err.message : "Sign in failed",
-      });
+      if (err instanceof AuthError) {
+        // The pasted token was rejected — don't persist it.
+        setAuthToken(null);
+        await writeTokenToSecureStore(null);
+        set({ token: null, user: null, status: "error", error: "Invalid token" });
+      } else {
+        set({
+          status: "error",
+          error: err instanceof Error ? err.message : "Sign in failed",
+        });
+      }
       throw err;
     }
   },

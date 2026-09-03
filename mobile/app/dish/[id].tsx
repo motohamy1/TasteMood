@@ -36,16 +36,17 @@ export default function DishDetailsScreen() {
     [savedInteractions, dish?.id]
   );
 
-  // Fire a VIEW_DISH interaction once the dish loads.
+  // Fire a VIEW_DISH interaction once the dish loads (signed-in users only —
+  // the endpoint requires auth and a 401 here is pure noise for guests).
   useEffect(() => {
-    if (dish?.id) {
+    if (dish?.id && isSignedIn) {
       recordInteraction.mutate({
         dishId: dish.id,
         interactionType: "VIEW_DISH",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dish?.id]);
+  }, [dish?.id, isSignedIn]);
 
   function toggleSave() {
     if (!dish) return;
