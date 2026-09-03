@@ -116,37 +116,37 @@ const { data, ... } = useRecommendations(submitted, { enabled: !!submitted });
 
 ## Warning
 
-### WR-01: ApiError.code never populated; AuthError uses a code the backend never emits
+### WR-01: ✅ FIXED — ApiError.code never populated; AuthError uses a code the backend never emits
 
 Backend error body is `{ success:false, error:{ code, message } }` (backend/src/middleware/error.middleware.ts:19-26). `api.ts:111` reads `errorBody?.code` (top level — absent) instead of `errorBody?.error?.code`, so `ApiError.code` is always `undefined` and code-based handling (e.g. `VALIDATION_ERROR`, `RATE_LIMIT_EXCEEDED`) is impossible. Additionally `AuthError` hardcodes `"UNAUTHENTICATED"` (api.ts:60) which is not in backend `ERROR_CODES` (`UNAUTHORIZED` is).
 
 **Fix:** `if (errorBody?.error?.code) code = errorBody.error.code;` and change AuthError's code to `"UNAUTHORIZED"`.
 
-### WR-02: `PriceRange` enum diverges from backend
+### WR-02: ✅ FIXED — `PriceRange` enum diverges from backend
 
 `mobile/src/types/user.ts:16` — `"BUDGET" | "MID_RANGE" | "PREMIUM" | "LUXURY"` vs backend `["BUDGET","MODERATE","EXPENSIVE","LUXURY"]` (backend/src/modules/preferences/schema.ts:8, Prisma `enum PriceRange`). Any UI sending `preferredPriceRange` with mobile's values gets a 400 VALIDATION_ERROR.
 
 **Fix:** align the union to `BUDGET | MODERATE | EXPENSIVE | LUXURY`.
 
-### WR-03: No debounce on Discover search — one `/dishes` request per keystroke
+### WR-03: ✅ FIXED — No debounce on Discover search — one `/dishes` request per keystroke
 
 `index.tsx:26-36` feeds raw `search` state into `useDishes` params → queryKey changes per character → a request per character (plus retry:1). With `standardRateLimiter` at 100 req/15min, browsing + typing trips 429s. `useDishSearch` (with a `/search/dishes` call) exists but is unused; `SearchBar` has no submit/`onEndEditing` handling (search-bar.tsx).
 
 **Fix:** debounce params by ~300ms (`useDeferredValue` works well on RN/React 18), or trigger search on keyboard `returnKeyType="search"` submit.
 
-### WR-04: `Number(maxPrice)` NaN becomes `null` in JSON → whole recommendation request rejected
+### WR-04: ✅ FIXED (folded into CR-04 submit-payload builder) — `Number(maxPrice)` NaN becomes `null` in JSON → whole recommendation request rejected
 
 `ai.tsx:42` — `maxPrice: maxPrice ? Number(maxPrice) : undefined`. `keyboardType="numeric"` doesn't prevent invalid input on all platforms; `JSON.stringify({maxPrice: NaN})` → `"maxPrice":null`, which fails `z.number().positive().optional()` (backend/src/modules/recommendations/schema.ts:7) with 400.
 
 **Fix:** `const parsed = Number(maxPrice); maxPrice && Number.isFinite(parsed) && parsed > 0 ? parsed : undefined`.
 
-### WR-05: Authed queries fire for signed-out guests → guaranteed 401 noise
+### WR-05: ✅ FIXED — Authed queries fire for signed-out guests → guaranteed 401 noise
 
 `saved.tsx:43` (`useMyInteractions`), `dish/[id].tsx:31` (`useMyInteractions`) and `:46-53` (`VIEW_DISH` mutate), `profile.tsx:66` (`useMyPreferences`, runs before the `!isSignedIn` early return) all execute without a token. Each is an auth-required endpoint → 401 + 1 retry each, every screen visit, for guests.
 
 **Fix:** add `enabled: isSignedIn` options to `useMyInteractions`/`useMyPreferences` and guard the VIEW_DISH effect with `if (dish?.id && isSignedIn)` (mobile/src/lib/queries.ts:110-127).
 
-### WR-06: No session-expiry handling — a dead token persists forever
+### WR-06: ✅ FIXED — No session-expiry handling — a dead token persists forever
 
 `auth-store.ts:60-73` hydrate keeps a stored token even when `getMe` fails ("UI can prompt to re-auth"), but nothing ever prompts: all subsequent authed calls fail silently (errors unchecked in saved/profile screens) and the user appears signed in. A rotated/expired Supabase JWT puts the app in a permanent broken-signed-in state.
 
