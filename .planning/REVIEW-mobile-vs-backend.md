@@ -60,7 +60,7 @@ queryFn: () => getDishes(params),
 
 If `meta` is needed later (IN-01), make `request` return the full `{ data, meta }` envelope instead of unwrapping.
 
-### CR-02: Dish shape mismatch — backend returns nested Prisma rows; mobile expects a flat DTO
+### CR-02: ✅ FIXED — Dish shape mismatch — backend returns nested Prisma rows; mobile expects a flat DTO
 
 `mobile/src/types/dish.ts` `DishSummary` expects `restaurantName`, `branchName`, `category`, `cuisine`, `rating`, `reviewCount`, `calories`, `prepTimeMinutes`, and flat `tasteAttributes/tags/ingredients`. The backend serializes raw Prisma includes — `attributes`, `categories[].category`, `tags[].tag`, `ingredients[].ingredient`, `menu.restaurant` (backend/src/modules/dishes/repository.ts:114-131, 134-160). None of the flat fields exist; `rating`/`reviewCount`/`calories`/`prepTimeMinutes` exist nowhere in the Prisma schema at all (backend/prisma/schema.prisma `model Dish`).
 

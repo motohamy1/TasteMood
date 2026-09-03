@@ -121,6 +121,11 @@ export class DishRepository {
               restaurant: {
                 include: {
                   cuisines: { include: { cuisine: true } },
+                  branches: {
+                    where: { status: 'ACTIVE' },
+                    orderBy: { createdAt: 'asc' },
+                    take: 1,
+                  },
                 },
               },
             },

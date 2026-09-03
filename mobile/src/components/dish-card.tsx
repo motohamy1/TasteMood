@@ -57,13 +57,15 @@ export function DishCard({ dish, className }: Props) {
               {formatPrice(dish.price, dish.currency)}
             </Text>
 
-            <View className="flex-row items-center gap-1">
-              <Text className="text-xs">★</Text>
-              <Text className="text-xs text-neutral-700">
-                {dish.rating.toFixed(1)}
-                {dish.reviewCount > 0 ? ` (${dish.reviewCount})` : ""}
-              </Text>
-            </View>
+            {typeof dish.rating === "number" ? (
+              <View className="flex-row items-center gap-1">
+                <Text className="text-xs">★</Text>
+                <Text className="text-xs text-neutral-700">
+                  {dish.rating.toFixed(1)}
+                  {dish.reviewCount && dish.reviewCount > 0 ? ` (${dish.reviewCount})` : ""}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {dish.tasteAttributes.length > 0 && (

@@ -140,13 +140,15 @@ export default function DishDetailsScreen() {
           <Text className="text-2xl font-bold text-brand-600">
             {formatPrice(dish.price, dish.currency)}
           </Text>
-          <View className="flex-row items-center gap-1">
-            <Text>★</Text>
-            <Text className="text-sm text-neutral-700">
-              {dish.rating.toFixed(1)}
-              {dish.reviewCount > 0 ? ` · ${dish.reviewCount} reviews` : ""}
-            </Text>
-          </View>
+          {typeof dish.rating === "number" ? (
+            <View className="flex-row items-center gap-1">
+              <Text>★</Text>
+              <Text className="text-sm text-neutral-700">
+                {dish.rating.toFixed(1)}
+                {dish.reviewCount && dish.reviewCount > 0 ? ` · ${dish.reviewCount} reviews` : ""}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {dish.description ? (

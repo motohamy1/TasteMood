@@ -47,8 +47,9 @@ export interface DishSummary {
   imageUrl?: string;
   status: DishStatus;
   verificationStatus?: VerificationStatus;
-  rating: number;
-  reviewCount: number;
+  /** Ratings are not modeled in the backend yet — only render when present. */
+  rating?: number;
+  reviewCount?: number;
   calories?: number;
   prepTimeMinutes?: number;
   restaurantName: string;

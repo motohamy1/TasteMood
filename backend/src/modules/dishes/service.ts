@@ -1,10 +1,12 @@
 import { dishRepository } from './repository.js';
+import { presentDish, presentDishList } from './presenter.js';
 import { CreateDishInput, QueryDishInput, UpdateDishInput } from './schema.js';
 import { AppError } from '../../common/errors/app-error.js';
 
 export class DishService {
   async getDishes(params: QueryDishInput) {
-    return dishRepository.findMany(params);
+    const result = await dishRepository.findMany(params);
+    return { ...result, items: presentDishList(result.items) };
   }
 
   async getDishById(id: string) {
@@ -12,7 +14,7 @@ export class DishService {
     if (!dish) {
       throw AppError.notFound(`Dish with ID ${id} not found`);
     }
-    return dish;
+    return presentDish(dish);
   }
 
   async createDish(input: CreateDishInput) {
