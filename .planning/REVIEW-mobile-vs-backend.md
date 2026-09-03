@@ -68,7 +68,7 @@ If `meta` is needed later (IN-01), make `request` return the full `{ data, meta 
 
 **Fix (preferred):** add a presenter/serializer on the backend (`dishPresenter(dish) → { restaurantName: dish.menu.restaurant.name, rating: ..., tasteAttributes: dish.attributes?.tasteAttributes ?? [] , ...}`) so the DTO matches the documented mobile types. Mobile stopgap: map the response in `api.ts` and make DishCard defensive (`dish.rating?.toFixed(1) ?? "—"`).
 
-### CR-03: `RecommendationResponse` shape mismatch — AI results can't render
+### CR-03: ✅ FIXED — `RecommendationResponse` shape mismatch — AI results can't render
 
 Backend returns `{ request, interpretation, recommendations: [{ dish, restaurant, branch, distanceMeters, score, scoreBreakdown, reason }] }` (backend/src/modules/recommendations/recommendation.service.ts:220-260) — each item is **nested**, not a flat `Dish` as mobile's `types/recommendation.ts` claims. `ai.tsx:56` feeds these objects straight into `DishCard` (`recs.map((dish) => <DishCard dish={dish} />)`): `dish.id/name/price` are undefined → blank cards and a TypeError on `dish.rating.toFixed(1)`. The top-level `explanation` field never exists, so the "Why these?" block is dead code, while the real per-item `reason` is dropped.
 

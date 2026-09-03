@@ -11,7 +11,7 @@ import { Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useRecommendations } from "@/lib/queries";
-import { DishCard } from "@/components/dish-card";
+import { RecommendationCard } from "@/components/recommendation-card";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/cn";
@@ -114,17 +114,6 @@ export default function AiScreen() {
         })}
       </View>
 
-      {data?.explanation ? (
-        <View className="bg-brand-50 border border-brand-100 rounded-2xl p-3">
-          <Text className="text-xs font-semibold text-brand-700 uppercase mb-1">
-            Why these?
-          </Text>
-          <Text className="text-sm text-neutral-800 leading-5">
-            {data.explanation}
-          </Text>
-        </View>
-      ) : null}
-
       {isLoading ? (
         <View className="gap-3 mt-2">
           <ActivityIndicator color="#f97316" />
@@ -155,9 +144,9 @@ export default function AiScreen() {
         />
       ) : (
         <View className="flex-row flex-wrap gap-3 mt-2">
-          {recs.map((dish) => (
-            <View key={dish.id} className="basis-[48%] flex-1">
-              <DishCard dish={dish} />
+          {recs.map((item) => (
+            <View key={item.dish.id} className="basis-[48%] flex-1">
+              <RecommendationCard item={item} />
             </View>
           ))}
         </View>
