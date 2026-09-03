@@ -14,6 +14,19 @@ export class InteractionRepository {
     });
   }
 
+  async findSaved(userId: string, dishId: string) {
+    return prisma.userInteraction.findFirst({
+      where: { userId, dishId, interactionType: 'SAVED' },
+    });
+  }
+
+  async removeSaved(userId: string, dishId: string) {
+    const result = await prisma.userInteraction.deleteMany({
+      where: { userId, dishId, interactionType: 'SAVED' },
+    });
+    return result.count;
+  }
+
   async findManyByUserId(userId: string, params: QueryInteractionsInput) {
     const { page, limit, interactionType } = params;
     const skip = (page - 1) * limit;

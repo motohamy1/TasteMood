@@ -183,6 +183,13 @@ export function recordInteraction(input: {
   });
 }
 
+export function unsaveDish(dishId: string) {
+  return request<{ removed: number }>(
+    `/interactions/saved/${encodeURIComponent(dishId)}`,
+    { method: "DELETE", requireAuth: true }
+  );
+}
+
 export function getMyInteractions(params: {
   page?: number;
   limit?: number;

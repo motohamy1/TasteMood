@@ -17,6 +17,7 @@ import {
   getRecommendations,
   recordInteraction,
   searchDishes,
+  unsaveDish,
   updateMyPreferences,
 } from "./api";
 import type { Dish, DishSummary } from "@/types/dish";
@@ -103,6 +104,18 @@ export function useRecordInteraction() {
         qc.invalidateQueries({ queryKey: queryKeys.dish(vars.dishId) });
       }
       qc.invalidateQueries({ queryKey: ["interactions", "me"] });
+    },
+  });
+}
+
+export function useUnsaveDish() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dishId: string) => unsaveDish(dishId),
+    onSuccess: (_data, dishId) => {
+      qc.invalidateQueries({ queryKey: queryKeys.dish(dishId) });
+      qc.invalidateQueries({ queryKey: ["interactions", "me"] });
+      qc.invalidateQueries({ queryKey: ["saved-dishes"] });
     },
   });
 }

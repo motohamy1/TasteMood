@@ -14,6 +14,19 @@ export class InteractionController {
     }
   }
 
+  async unsaveDish(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw AppError.unauthorized();
+      const result = await interactionService.removeSavedInteraction(
+        req.user.id,
+        req.params.dishId
+      );
+      res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getMyInteractions(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw AppError.unauthorized();

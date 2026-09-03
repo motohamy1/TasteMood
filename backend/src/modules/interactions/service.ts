@@ -4,6 +4,13 @@ import { preferencesRepository } from '../preferences/repository.js';
 
 export class InteractionService {
   async recordInteraction(userId: string, input: CreateInteractionInput) {
+    // SAVED is idempotent per dish: a repeat save returns the existing row
+    // instead of duplicating it (CR-05).
+    if (input.interactionType === 'SAVED' && input.dishId) {
+      const existing = await interactionRepository.findSaved(userId, input.dishId);
+      if (existing) return existing;
+    }
+
     const interaction = await interactionRepository.create(userId, input);
 
     // Optional background inferred preference enrichment (non-blocking)
@@ -23,6 +30,11 @@ export class InteractionService {
     }
 
     return interaction;
+  }
+
+  async removeSavedInteraction(userId: string, dishId: string) {
+    const removed = await interactionRepository.removeSaved(userId, dishId);
+    return { removed };
   }
 
   async getUserInteractions(userId: string, params: QueryInteractionsInput) {

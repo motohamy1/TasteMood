@@ -7,6 +7,7 @@ import {
   useDish,
   useMyInteractions,
   useRecordInteraction,
+  useUnsaveDish,
 } from "@/lib/queries";
 import { useAuthStore, selectIsSignedIn } from "@/lib/auth-store";
 import { useEffect, useMemo } from "react";
@@ -20,6 +21,7 @@ export default function DishDetailsScreen() {
   const insets = useSafeAreaInsets();
   const { data: dish, isLoading, isError, error, refetch } = useDish(id);
   const recordInteraction = useRecordInteraction();
+  const unsaveDish = useUnsaveDish();
   const isSignedIn = useAuthStore(selectIsSignedIn);
 
   // Fetch the user's saved interactions to know if THIS dish is saved.
@@ -48,10 +50,14 @@ export default function DishDetailsScreen() {
   function toggleSave() {
     if (!dish) return;
     if (!isSignedIn) return; // heart button hidden in this case
-    recordInteraction.mutate({
-      dishId: dish.id,
-      interactionType: "SAVED",
-    });
+    if (isSaved) {
+      unsaveDish.mutate(dish.id);
+    } else {
+      recordInteraction.mutate({
+        dishId: dish.id,
+        interactionType: "SAVED",
+      });
+    }
   }
 
   if (isLoading) {

@@ -106,7 +106,7 @@ const { data, ... } = useRecommendations(submitted, { enabled: !!submitted });
 
 `useRecommendations` should accept `RecommendationRequest | null` and set `enabled: payload != null`.
 
-### CR-05: "Unsave" doesn't exist — heart toggle and Remove both duplicate SAVED rows
+### CR-05: ✅ FIXED — "Unsave" doesn't exist — heart toggle and Remove both duplicate SAVED rows
 
 `saved.tsx:60-71` "removes" a dish by POSTing **another** `SAVED` interaction; `dish/[id].tsx:118-126` toggle-save sends `SAVED` with no way to undo. The backend has no delete/unlike endpoint (backend/src/modules/interactions/routes.ts only has POST `/` and GET `/me`), and `interactionService.recordInteraction` inserts unconditionally. After the refetch, the "removed" dish returns; `isSaved` can never go false. `removedIds` is a UI-only illusion that resets via `useEffect` (saved.tsx:58).
 

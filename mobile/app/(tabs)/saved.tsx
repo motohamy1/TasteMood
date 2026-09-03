@@ -6,12 +6,15 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "expo-router";
 
 import { useAuthStore, selectIsSignedIn } from "@/lib/auth-store";
 import { getDish } from "@/lib/api";
-import { useMyInteractions, useRecordInteraction } from "@/lib/queries";
+import {
+  useMyInteractions,
+  useUnsaveDish,
+} from "@/lib/queries";
 import { DishCard } from "@/components/dish-card";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
 import { EmptyState } from "@/components/empty-state";
@@ -35,7 +38,6 @@ function useSavedDishes(dishIds: string[]) {
 export default function SavedScreen() {
   const insets = useSafeAreaInsets();
   const isSignedIn = useAuthStore(selectIsSignedIn);
-  const qc = useQueryClient();
 
   const { data: interactions, isLoading: loadingInteractions } =
     useMyInteractions({ interactionType: "SAVED", limit: 50 });
@@ -49,7 +51,7 @@ export default function SavedScreen() {
   );
 
   const { data: dishes, isLoading: loadingDishes } = useSavedDishes(dishIds);
-  const recordInteraction = useRecordInteraction();
+  const unsaveDishMutation = useUnsaveDish();
 
   // Local optimistic list of removed ids so the UI updates instantly.
   const [removedIds, setRemovedIds] = useState<string[]>([]);
@@ -57,14 +59,7 @@ export default function SavedScreen() {
 
   function unsave(dishId: string) {
     setRemovedIds((prev) => [...prev, dishId]);
-    recordInteraction.mutate(
-      { dishId, interactionType: "SAVED" },
-      {
-        onSettled: () => {
-          qc.invalidateQueries({ queryKey: ["interactions", "me"] });
-        },
-      }
-    );
+    unsaveDishMutation.mutate(dishId);
   }
 
   const visibleDishes = (dishes ?? []).filter((d) => !removedIds.includes(d.id));

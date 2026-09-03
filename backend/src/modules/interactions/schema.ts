@@ -28,5 +28,10 @@ export const QueryInteractionsSchema = z.object({
   interactionType: InteractionTypeEnum.optional(),
 });
 
+export const DishIdParamSchema = z.object({
+  dishId: z.string().uuid(),
+});
+
 export type CreateInteractionInput = z.infer<typeof CreateInteractionSchema>;
 export type QueryInteractionsInput = z.infer<typeof QueryInteractionsSchema>;
+export type DishIdParamInput = z.infer<typeof DishIdParamSchema>;
