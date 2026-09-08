@@ -3,20 +3,14 @@ import { View } from "react-native";
 /** Pulsing placeholder card shown while /dishes is loading. */
 export function DishSkeleton() {
   return (
-    <View
-      className="bg-white rounded-2xl overflow-hidden border border-neutral-200"
-      style={{
-        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.05)",
-        borderCurve: "continuous",
-      }}
-    >
-      <View className="w-full h-40 bg-neutral-200" />
-      <View className="p-3 gap-2">
-        <View className="h-4 w-3/4 rounded bg-neutral-200" />
-        <View className="h-3 w-1/2 rounded bg-neutral-200" />
-        <View className="flex-row justify-between mt-2">
-          <View className="h-4 w-16 rounded bg-neutral-200" />
-          <View className="h-3 w-12 rounded bg-neutral-200" />
+    <View className="bg-ink-900 border border-ink-700 rounded-2xl overflow-hidden">
+      <View className="w-full h-[88px] bg-ink-800" />
+      <View className="p-2.5 gap-1.5">
+        <View className="h-3.5 w-3/4 rounded bg-ink-800" />
+        <View className="h-2.5 w-1/2 rounded bg-ink-800" />
+        <View className="flex-row justify-between mt-1">
+          <View className="h-3.5 w-14 rounded bg-ink-800" />
+          <View className="h-2.5 w-10 rounded bg-ink-800" />
         </View>
       </View>
     </View>

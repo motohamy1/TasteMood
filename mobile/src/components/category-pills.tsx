@@ -12,7 +12,7 @@ export function CategoryPills({ options, selected, onSelect }: Props) {
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      contentContainerClassName="gap-2 px-4"
+      contentContainerClassName="gap-1.5 px-4"
       contentInsetAdjustmentBehavior="automatic"
     >
       {options.map((option) => {
@@ -22,16 +22,14 @@ export function CategoryPills({ options, selected, onSelect }: Props) {
             key={option}
             onPress={() => onSelect(option)}
             className={cn(
-              "px-4 py-2 rounded-full border",
-              isActive
-                ? "bg-brand-500 border-brand-500"
-                : "bg-white border-neutral-200"
+              "px-3.5 py-1.5 rounded-full border",
+              isActive ? "bg-brand-500 border-brand-500" : "border-ink-700"
             )}
           >
             <Text
               className={cn(
-                "text-sm font-medium",
-                isActive ? "text-white" : "text-neutral-700"
+                "text-xs",
+                isActive ? "font-semibold text-night" : "font-medium text-cream"
               )}
             >
               {option}

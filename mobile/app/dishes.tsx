@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, RefreshControl, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDishes } from "@/lib/queries";
@@ -8,6 +8,7 @@ import { DishSkeletonGrid } from "@/components/dish-skeleton";
 import { CategoryPills } from "@/components/category-pills";
 import { SearchBar } from "@/components/search-bar";
 import { EmptyState } from "@/components/empty-state";
+import { AmbientGlow } from "@/components/ambient-glow";
 
 const CUISINES = [
   "All",
@@ -52,12 +53,10 @@ export default function DishesScreen() {
   const dishes = data ?? [];
 
   return (
-    <View className="flex-1 bg-[#FFF8F1]">
-      <FlatList
-        data={dishes}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperClassName="gap-3"
+    <View className="flex-1 bg-ink-950 overflow-hidden">
+      <AmbientGlow top={80} />
+      <ScrollView
+        className="flex-1 bg-transparent"
         contentContainerClassName="px-4"
         contentContainerStyle={{
           paddingTop: 8,
@@ -66,44 +65,59 @@ export default function DishesScreen() {
         }}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            tintColor="#DB9338"
+            colors={["#DB9338"]}
+          />
         }
-        ListHeaderComponent={
-          <View className="gap-3 mb-2">
-            <Text className="text-sm text-neutral-500">
+      >
+        <View className="gap-3">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
               {isLoading ? "Loading…" : `${dishes.length} dishes`}
             </Text>
-            <SearchBar value={search} onChangeText={setSearch} />
-            <CategoryPills
-              options={CUISINES}
-              selected={cuisine}
-              onSelect={setCuisine}
-            />
+            <Text className="text-[10px] font-semibold uppercase tracking-[0.08em] text-cream-mute">
+              pull to refresh
+            </Text>
           </View>
-        }
-        renderItem={({ item }) => <DishCard dish={item} className="flex-1" />}
-        ListEmptyComponent={
-          isLoading ? (
-            <View className="flex-row flex-wrap gap-3">
-              <DishSkeletonGrid count={6} />
-            </View>
-          ) : isError ? (
-            <EmptyState
-              icon="⚠️"
-              title="Couldn't load dishes"
-              description={
-                (error as Error)?.message ?? "Please try again later."
-              }
-            />
-          ) : (
-            <EmptyState
-              icon="🔍"
-              title="No dishes found"
-              description="Try a different search or cuisine."
-            />
-          )
-        }
-      />
+          <SearchBar value={search} onChangeText={setSearch} />
+          <CategoryPills
+            options={CUISINES}
+            selected={cuisine}
+            onSelect={setCuisine}
+          />
+        </View>
+
+        {isLoading ? (
+          <View className="flex-row flex-wrap gap-2.5">
+            <DishSkeletonGrid count={6} />
+          </View>
+        ) : isError ? (
+          <EmptyState
+            icon="⚠️"
+            title="Couldn't load dishes"
+            description={
+              (error as Error)?.message ?? "Please try again later."
+            }
+          />
+        ) : dishes.length === 0 ? (
+          <EmptyState
+            icon="🔍"
+            title="No dishes found"
+            description="Try a different search or cuisine."
+          />
+        ) : (
+          <View className="flex-row flex-wrap gap-2.5">
+            {dishes.map((item) => (
+              <View key={item.id} className="basis-[48%] flex-1 min-w-[44%]">
+                <DishCard dish={item} className="flex-1" />
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }

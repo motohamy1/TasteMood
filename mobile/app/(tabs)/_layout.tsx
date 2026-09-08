@@ -1,43 +1,92 @@
+import { Image } from "expo-image";
+import { Pressable, Text, View } from "react-native";
 import { Tabs } from "expo-router";
-import { Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { cn } from "@/lib/cn";
+import { tabIcon } from "@/components/tab-icons";
+import { AI_BUTTON_GLOW, COLORS } from "@/lib/theme";
 
 /**
- * Simple SF-symbol-style icon glyphs rendered as text to keep zero deps.
- * Swap for `expo-symbols` later for proper icons.
+ * Tab bar matching the Paper design: a glowing amber spark button floating
+ * beside a warm shell pill holding the other tabs, with a wine-tinted
+ * active slot.
  */
-function TabIcon({
-  focused,
-  glyph,
-  label,
-}: {
-  focused: boolean;
-  glyph: string;
-  label: string;
-}) {
+function CustomTabBar({ state, navigation }: any) {
+  const insets = useSafeAreaInsets();
+  const routes: Array<{ key: string; name: string }> = state.routes;
+  const index: number = state.index;
+  const spark = routes.find((r) => r.name === "ai");
+  const rest = routes.filter((r) => r.name !== "ai");
+  const sparkFocused = spark ? index === routes.indexOf(spark) : false;
+
+  function goTo(name: string, focused: boolean) {
+    const event = navigation.emit({
+      type: "tabPress",
+      target: name,
+      canPreventDefault: true,
+    });
+    if (!focused && !event.defaultPrevented) {
+      navigation.navigate(name);
+    }
+  }
+
   return (
     <View
-      className={cn(
-        "items-center justify-center py-1 px-3 rounded-full",
-        focused ? "bg-brand-100" : "bg-transparent"
-      )}
+      className="absolute left-0 right-0 flex-row items-center px-4 gap-3"
+      style={{ bottom: insets.bottom + 12 }}
     >
-      <Text
-        className={cn(
-          "text-lg",
-          focused ? "text-brand-600" : "text-neutral-500"
-        )}
+      {spark ? (
+        <Pressable
+          onPress={() => goTo(spark.name, sparkFocused)}
+          accessibilityRole="button"
+          className={cn(
+            "w-[66px] h-[66px] rounded-full items-center justify-center border",
+            sparkFocused
+              ? "bg-brand-300 border-brand-200"
+              : "bg-brand-500 border-brand-200/60"
+          )}
+          style={{ boxShadow: AI_BUTTON_GLOW }}
+        >
+          <Image
+            source={tabIcon("ai", "#431407", 26)}
+            style={{ width: 26, height: 26 }}
+            accessibilityLabel="AI chef"
+          />
+        </Pressable>
+      ) : null}
+
+      <View
+        className="flex-1 flex-row items-center h-[66px] rounded-full border-[1.5px]"
+        style={{
+          backgroundColor: COLORS.shell,
+          borderColor: "#73493E66",
+          boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.55)",
+        }}
       >
-        {glyph}
-      </Text>
-      <Text
-        className={cn(
-          "text-[10px] mt-0.5",
-          focused ? "text-brand-600 font-semibold" : "text-neutral-500"
-        )}
-      >
-        {label}
-      </Text>
+        {rest.map((route) => {
+          const focused = index === routes.indexOf(route);
+          return (
+            <Pressable
+              key={route.key}
+              onPress={() => goTo(route.name, focused)}
+              accessibilityRole="button"
+              className={cn(
+                "flex-1 items-center justify-center h-[54px] rounded-full mx-0.5",
+                focused && "bg-ember/10"
+              )}
+            >
+              <Image
+                source={tabIcon(
+                  route.name,
+                  focused ? COLORS.ember : COLORS.taupe
+                )}
+                style={{ width: 24, height: 24 }}
+              />
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -45,53 +94,15 @@ function TabIcon({
 export default function TabsLayout() {
   return (
     <Tabs
+      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
-        tabBarStyle: {
-          backgroundColor: "#ffffff",
-          borderTopColor: "#fed7aa",
-          height: 70,
-          paddingTop: 8,
-        },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} glyph="🍽" label="Home" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="saved"
-        options={{
-          title: "Saved",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} glyph="♥" label="Saved" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="ai"
-        options={{
-          title: "Explore",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} glyph="🧭" label="Explore" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} glyph="👤" label="Profile" />
-          ),
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: "Dishes" }} />
+      <Tabs.Screen name="personality" options={{ title: "Personality" }} />
+      <Tabs.Screen name="favourites" options={{ title: "Favourites" }} />
+      <Tabs.Screen name="ai" options={{ title: "AI chef" }} />
     </Tabs>
   );
 }

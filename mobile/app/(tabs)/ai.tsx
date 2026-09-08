@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -10,19 +10,21 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useRecommendations } from "@/lib/queries";
+import { ProfileButton } from "@/components/profile-button";
 import { RecommendationCard } from "@/components/recommendation-card";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
 import { EmptyState } from "@/components/empty-state";
-import { SectionHeader } from "@/components/section-header";
+import { AmbientGlow } from "@/components/ambient-glow";
 import { cn } from "@/lib/cn";
+import { COLORS } from "@/lib/theme";
 import type { RecommendationRequest } from "@/types/recommendation";
 
 const QUICK_PROMPTS: Array<{ label: string; payload: Partial<RecommendationRequest> }> = [
-  { label: "🌶 Spicy & under 200 EGP", payload: { maxPrice: 200, tasteAttributes: ["SPICY"] } },
-  { label: "🥗 Healthy & light", payload: { mealTypes: ["LIGHT"] } },
-  { label: "🍰 Sweet treat", payload: { tasteAttributes: ["SWEET"], mealTypes: ["DESSERT"] } },
-  { label: "🌱 Vegan", payload: { dietaryRestrictions: ["VEGAN"] } },
-  { label: "🎲 Surprise me", payload: { surpriseMe: true } },
+  { label: "Spicy & under 200 EGP", payload: { maxPrice: 200, tasteAttributes: ["SPICY"] } },
+  { label: "Healthy & light", payload: { mealTypes: ["LIGHT"] } },
+  { label: "Sweet treat", payload: { tasteAttributes: ["SWEET"], mealTypes: ["DESSERT"] } },
+  { label: "Vegan", payload: { dietaryRestrictions: ["VEGAN"] } },
+  { label: "Surprise me", payload: { surpriseMe: true } },
 ];
 
 const MOODS: Array<{ emoji: string; label: string; query: string }> = [
@@ -34,12 +36,19 @@ const MOODS: Array<{ emoji: string; label: string; query: string }> = [
   { emoji: "🌙", label: "Late night", query: "quick late night snack" },
 ];
 
+function CapsLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
+      {children}
+    </Text>
+  );
+}
+
 /**
- * Explore: browse by mood tiles or describe a craving — powered by the
- * AI recommendations engine. Requests fire only on explicit action
- * (submit / tile / prompt tap), never on keystroke — POSTing
- * /recommendations per character would burn the AI rate limit and
- * provider budget (CR-04).
+ * Explore (AI Chef): describe a craving or pick a mood — powered by the AI
+ * recommendations engine. Requests fire only on explicit action (submit /
+ * tile / prompt tap), never on keystroke — POSTing /recommendations per
+ * character would burn the AI rate limit and provider budget (CR-04).
  */
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
@@ -96,164 +105,259 @@ export default function ExploreScreen() {
 
   const { data, isLoading, isError, error } = useRecommendations(submitted);
 
-  const recs = data?.recommendations ?? [];
+  // Drop malformed items (missing dish) and dedupe by dish id — the
+  // backend can return the same dish twice, and duplicate React keys
+  // crash the whole results grid (thrown at the key={...} line).
+  const recs = useMemo(() => {
+    const seen = new Set<string>();
+    return (data?.recommendations ?? []).filter((item) => {
+      const id = item?.dish?.id;
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [data]);
+  const intentTastes = submitted?.tasteAttributes ?? [];
+  const intentPrice = submitted?.maxPrice;
 
   return (
-    <ScrollView
-      className="flex-1 bg-[#FFF8F1]"
-      contentContainerStyle={{
-        paddingTop: insets.top + 12,
-        paddingBottom: 96,
-        gap: 16,
-      }}
-      contentInsetAdjustmentBehavior="automatic"
-      showsVerticalScrollIndicator={false}
-    >
-      <View className="px-5 gap-1">
-        <Text className="text-2xl font-bold text-neutral-900">Explore</Text>
-        <Text className="text-sm text-neutral-600">
-          Pick a mood or describe a craving — AI does the rest.
-        </Text>
-      </View>
-
-      {/* Mood tiles */}
-      <View className="gap-2">
-        <View className="px-5">
-          <SectionHeader title="Browse by mood" />
+    <View className="flex-1 bg-ink-950 overflow-hidden">
+      <AmbientGlow />
+      <ScrollView
+        className="flex-1 bg-transparent"
+        contentContainerStyle={{
+          // gap lives on the inner View — ScrollView contentContainer
+          // ignores gap on Android.
+          paddingTop: insets.top + 12,
+          paddingBottom: 110,
+        }}
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View className="gap-4">
+        {/* Header */}
+        <View className="px-4 flex-row items-start gap-3">
+          <View className="flex-1 gap-1">
+            <View className="flex-row items-center gap-1.5">
+              <View className="w-2 h-2 rounded-full bg-brand-500" />
+              <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+                AI chef • Online
+              </Text>
+            </View>
+            <Text className="text-2xl font-bold text-brand-50">
+              What are you craving?
+            </Text>
+            <Text className="text-sm text-cream-mute leading-5">
+              Describe a craving or pick a mood — the AI chef maps it to real
+              dishes near you.
+            </Text>
+          </View>
+          <ProfileButton />
         </View>
-        <View className="px-5 flex-row flex-wrap gap-2">
-          {MOODS.map((m, i) => {
-            const isActive = i === activeMood;
-            return (
-              <Pressable
-                key={m.label}
-                onPress={() => toggleMood(i)}
-                className={cn(
-                  "flex-row items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border",
-                  isActive
-                    ? "bg-neutral-900 border-neutral-900"
-                    : "bg-white border-neutral-200"
-                )}
-              >
-                <Text className="text-base">{m.emoji}</Text>
-                <Text
+
+        {/* Craving input pill */}
+        <View className="px-4">
+          <View className="flex-row items-center gap-2 bg-ink-900 border border-brand-500 rounded-full pl-4 pr-1.5 py-1.5">
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="e.g. something spicy under 250 EGP…"
+              placeholderTextColor={COLORS.mute}
+              className="flex-1 text-[13px] text-cream"
+              returnKeyType="search"
+              onSubmitEditing={handleSubmit}
+            />
+            <TextInput
+              value={maxPrice}
+              onChangeText={setMaxPrice}
+              placeholder="250 EGP"
+              placeholderTextColor={COLORS.mute}
+              keyboardType="numeric"
+              className="w-[72px] text-center text-[11px] font-bold text-cream bg-ink-700 rounded-full py-1"
+            />
+            <Pressable
+              onPress={handleSubmit}
+              accessibilityRole="button"
+              accessibilityLabel="Find dishes"
+              className="w-9 h-9 rounded-full bg-brand-500 items-center justify-center active:opacity-85"
+            >
+              <Text className="text-[16px] font-bold text-night">↑</Text>
+            </Pressable>
+          </View>
+
+          {/* Quick prompt chips */}
+          <View className="flex-row flex-wrap gap-1.5 mt-3">
+            {QUICK_PROMPTS.map((p, i) => {
+              const isActive = i === activePrompt;
+              return (
+                <Pressable
+                  key={p.label}
+                  onPress={() => togglePrompt(i)}
                   className={cn(
-                    "text-xs font-semibold",
-                    isActive ? "text-white" : "text-neutral-800"
+                    "px-3 py-1.5 rounded-full border",
+                    isActive
+                      ? "bg-brand-500 border-brand-500"
+                      : "border-ink-700"
                   )}
                 >
-                  {m.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* AI chef input */}
-      <View className="px-5 gap-2">
-        <SectionHeader title="Ask the AI chef" />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="e.g. something spicy under 250 EGP"
-          placeholderTextColor="#a3a3a3"
-          className="bg-white border border-neutral-200 rounded-2xl px-4 py-3 text-sm text-neutral-900"
-          multiline
-          numberOfLines={2}
-          returnKeyType="search"
-          onSubmitEditing={handleSubmit}
-        />
-        <View className="flex-row items-center gap-2">
-          <Text className="text-xs text-neutral-500">Max price</Text>
-          <TextInput
-            value={maxPrice}
-            onChangeText={setMaxPrice}
-            placeholder="250"
-            placeholderTextColor="#a3a3a3"
-            keyboardType="numeric"
-            className="bg-white border border-neutral-200 rounded-full px-3 h-9 text-sm text-neutral-900 min-w-[80px]"
-          />
-          <Text className="text-xs text-neutral-500">EGP</Text>
-          <Pressable
-            onPress={handleSubmit}
-            className="ml-auto bg-brand-500 rounded-full px-4 h-9 items-center justify-center active:opacity-85"
-          >
-            <Text className="text-white text-xs font-semibold">Find dishes</Text>
-          </Pressable>
+                  <Text
+                    className={cn(
+                      "text-[11px]",
+                      isActive
+                        ? "font-semibold text-night"
+                        : "font-medium text-cream"
+                    )}
+                  >
+                    {p.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        <View className="flex-row flex-wrap gap-2">
-          {QUICK_PROMPTS.map((p, i) => {
-            const isActive = i === activePrompt;
-            return (
-              <Pressable
-                key={p.label}
-                onPress={() => togglePrompt(i)}
-                className={cn(
-                  "px-3 py-1.5 rounded-full border",
-                  isActive
-                    ? "bg-brand-500 border-brand-500"
-                    : "bg-white border-neutral-200"
-                )}
-              >
-                <Text
+        {/* Moods */}
+        <View className="px-4 gap-2">
+          <CapsLabel>Browse by mood</CapsLabel>
+          <View className="flex-row flex-wrap gap-1.5">
+            {MOODS.map((m, i) => {
+              const isActive = i === activeMood;
+              return (
+                <Pressable
+                  key={m.label}
+                  onPress={() => toggleMood(i)}
                   className={cn(
-                    "text-xs font-medium",
-                    isActive ? "text-white" : "text-neutral-700"
+                    "flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border",
+                    isActive
+                      ? "bg-brand-500 border-brand-500"
+                      : "border-ink-700"
                   )}
                 >
-                  {p.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Text className="text-[13px]">{m.emoji}</Text>
+                  <Text
+                    className={cn(
+                      "text-[11px]",
+                      isActive
+                        ? "font-semibold text-night"
+                        : "font-medium text-cream"
+                    )}
+                  >
+                    {m.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-      </View>
 
-      {/* Results */}
-      <View className="px-5">
-        {isLoading ? (
-          <View className="gap-3">
-            <ActivityIndicator color="#f97316" />
-            <View className="flex-row flex-wrap gap-3">
-              <DishSkeletonGrid count={4} />
+        {/* Echo of the submitted craving */}
+        {submitted?.query ? (
+          <View className="px-4 items-end gap-1.5">
+            <View
+              className="bg-brand-500 px-3.5 py-2.5 max-w-[85%]"
+              style={{
+                borderTopLeftRadius: 18,
+                borderTopRightRadius: 18,
+                borderBottomLeftRadius: 18,
+                borderBottomRightRadius: 4,
+              }}
+            >
+              <Text className="text-sm font-medium text-night leading-5">
+                {submitted.query}
+              </Text>
+            </View>
+            <Text className="text-[10px] font-semibold uppercase text-cream-mute">
+              Query{submitted.maxPrice ? ` • maxPrice ${submitted.maxPrice}` : ""}
+              {" • limit 6"}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Backend-intent panel */}
+        {submitted !== null ? (
+          <View className="px-4">
+            <View className="bg-ink-900 border border-wine rounded-2xl p-3 gap-2">
+              <Text className="text-xs font-semibold text-brand-50">
+                Interpreted as — backend intent
+              </Text>
+              <View className="flex-row flex-wrap items-center gap-1.5">
+                {intentTastes.map((t) => (
+                  <View
+                    key={t}
+                    className="bg-wine px-2.5 py-1 rounded-full"
+                  >
+                    <Text className="text-[11px] font-semibold text-cream">
+                      {t}
+                    </Text>
+                  </View>
+                ))}
+                {intentPrice ? (
+                  <View className="bg-wine px-2.5 py-1 rounded-full">
+                    <Text className="text-[11px] font-semibold text-cream">
+                      ≤ {intentPrice} EGP
+                    </Text>
+                  </View>
+                ) : null}
+                {submitted.query ? (
+                  <View className="border border-ink-700 px-2.5 py-1 rounded-full">
+                    <Text className="text-[11px] font-semibold text-cream-mute" numberOfLines={1}>
+                      free-text query
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
           </View>
-        ) : isError ? (
-          <EmptyState
-            icon="⚠️"
-            title="Couldn't get recommendations"
-            description={
-              (error as Error)?.message ??
-              "The AI service may be rate-limited — try again in a minute."
-            }
-          />
-        ) : submitted === null ? (
-          <EmptyState
-            icon="🧭"
-            title="What are you craving?"
-            description="Tap a mood or type a request to get started."
-          />
-        ) : recs.length === 0 ? (
-          <EmptyState
-            icon="🤔"
-            title="No matches"
-            description="Try loosening your filters."
-          />
-        ) : (
-          <View className="gap-2">
-            <SectionHeader title="For you" />
-            <View className="flex-row flex-wrap gap-3">
-              {recs.map((item) => (
-                <View key={item.dish.id} className="basis-[48%] flex-1">
-                  <RecommendationCard item={item} />
-                </View>
-              ))}
+        ) : null}
+
+        {/* Results */}
+        <View className="px-4">
+          {isLoading ? (
+            <View className="gap-3">
+              <View className="flex-row items-center gap-1.5 bg-ink-900 border border-ink-700 rounded-xl px-2.5 py-2 self-start">
+                <ActivityIndicator size="small" color={COLORS.amber} />
+                <CapsLabel>Loading • AI chef thinking</CapsLabel>
+              </View>
+              <View className="flex-row flex-wrap gap-3">
+                <DishSkeletonGrid count={4} />
+              </View>
             </View>
-          </View>
-        )}
-      </View>
-    </ScrollView>
+          ) : isError ? (
+            <View className="flex-row items-center gap-1.5 bg-brand-950 border border-[#7F1D1D] rounded-xl px-2.5 py-2">
+              <Text className="text-xs">⚠️</Text>
+              <Text className="text-[10px] font-semibold uppercase text-[#FECACA] flex-1">
+                {(error as Error)?.message ??
+                  "The AI service may be rate-limited — retry in a minute."}
+              </Text>
+            </View>
+          ) : submitted === null ? (
+            <EmptyState
+              icon="🧭"
+              title="What are you craving?"
+              description="Tap a mood or type a request to get started."
+            />
+          ) : recs.length === 0 ? (
+            <EmptyState
+              icon="🤔"
+              title="No matches"
+              description="Try loosening your filters."
+            />
+          ) : (
+            <View className="gap-3">
+              <CapsLabel>For you • {recs.length} picks</CapsLabel>
+              <View className="flex-row flex-wrap gap-3">
+                {recs.map((item) => (
+                  <View key={item.dish.id} className="basis-[48%] flex-1">
+                    <RecommendationCard item={item} />
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }

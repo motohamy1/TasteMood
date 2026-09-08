@@ -22,49 +22,43 @@ export function DishCard({ dish, className }: Props) {
     >
       <Pressable
         className={cn(
-          "bg-white rounded-2xl overflow-hidden border border-neutral-200",
+          "bg-brand-50 border border-cardline rounded-2xl overflow-hidden",
           "active:opacity-80",
           className
         )}
-        style={{
-          boxShadow: "0 2px 6px rgba(0, 0, 0, 0.05)",
-          borderCurve: "continuous",
-        }}
+        style={{ borderCurve: "continuous" }}
       >
         <Image
           source={{ uri: dish.imageUrl }}
-          className="w-full h-40 bg-neutral-100"
+          className="w-full h-[88px] bg-wine-deep"
           contentFit="cover"
           transition={200}
           accessibilityLabel={`${dish.name} photo`}
         />
 
-        <View className="p-3 gap-1">
+        <View className="p-2.5 gap-0.5">
           <Text
             numberOfLines={1}
-            className="text-base font-semibold text-neutral-900"
+            className="text-[13px] font-bold text-night"
           >
             {dish.name}
           </Text>
 
-          <Text numberOfLines={1} className="text-xs text-neutral-500">
+          <Text numberOfLines={1} className="text-[10px] text-cream-faint">
             {dish.restaurantName}
             {dish.branchName ? ` · ${dish.branchName}` : ""}
           </Text>
 
-          <View className="flex-row items-center justify-between mt-1">
-            <Text className="text-base font-bold text-brand-600">
+          <View className="flex-row items-center gap-1.5 mt-0.5">
+            <Text className="text-[13px] font-extrabold text-brand-600">
               {formatPrice(dish.price, dish.currency)}
             </Text>
 
             {typeof dish.rating === "number" ? (
-              <View className="flex-row items-center gap-1">
-                <Text className="text-xs">★</Text>
-                <Text className="text-xs text-neutral-700">
-                  {dish.rating.toFixed(1)}
-                  {dish.reviewCount && dish.reviewCount > 0 ? ` (${dish.reviewCount})` : ""}
-                </Text>
-              </View>
+              <Text className="text-[10px] text-stone-600">
+                ★ {dish.rating.toFixed(1)}
+                {dish.reviewCount && dish.reviewCount > 0 ? ` (${dish.reviewCount})` : ""}
+              </Text>
             ) : null}
           </View>
 
@@ -73,9 +67,9 @@ export function DishCard({ dish, className }: Props) {
               {dish.tasteAttributes.slice(0, 3).map((tag) => (
                 <View
                   key={tag}
-                  className="bg-brand-50 px-2 py-0.5 rounded-full border border-brand-100"
+                  className="px-1.5 py-px rounded-full border border-brand-100"
                 >
-                  <Text className="text-[10px] text-brand-700 font-medium">
+                  <Text className="text-[9px] text-brand-700 font-semibold">
                     {tag.toLowerCase().replace(/_/g, " ")}
                   </Text>
                 </View>

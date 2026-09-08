@@ -11,10 +11,12 @@ import { Stack, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuthStore } from "@/lib/auth-store";
+import { AmbientGlow } from "@/components/ambient-glow";
 import { cn } from "@/lib/cn";
+import { COLORS } from "@/lib/theme";
 
 /**
- * /auth — present modally from the Saved / Profile screens.
+ * /auth — present modally from the Favourites / Personality / Profile screens.
  *
  * For now this is a dev-friendly screen that accepts either:
  *   1. A Supabase JWT pasted in (for testing the real path), or
@@ -46,82 +48,100 @@ export default function AuthScreen() {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-white"
-      contentContainerClassName="px-5 gap-4"
-      contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 32 }}
-      contentInsetAdjustmentBehavior="automatic"
-    >
-      <Stack.Screen
-        options={{
-          title: "Sign in",
-          presentation: "modal",
-        }}
-      />
-
-      <Text className="text-2xl font-bold text-neutral-900">Welcome back</Text>
-      <Text className="text-sm text-neutral-600">
-        Sign in to sync your preferences, saved dishes, and AI history.
-      </Text>
-
-      <View className="gap-2">
-        <Text className="text-xs font-semibold text-neutral-500 uppercase">
-          Auth token
-        </Text>
-        <TextInput
-          value={token}
-          onChangeText={setToken}
-          placeholder="paste a JWT, or use a mock-* token"
-          placeholderTextColor="#a3a3a3"
-          className="bg-neutral-50 border border-neutral-200 rounded-2xl px-4 py-3 text-sm text-neutral-900"
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-          numberOfLines={3}
+    <View className="flex-1 bg-ink-950 overflow-hidden">
+      <AmbientGlow />
+      <ScrollView
+        className="flex-1 bg-transparent"
+        contentContainerClassName="px-5 gap-4"
+        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 32 }}
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
+      >
+        <Stack.Screen
+          options={{
+            title: "Sign in",
+            presentation: "modal",
+          }}
         />
-        <Pressable
-          onPress={() => submit(token)}
-          disabled={busy || !token.trim()}
-          className={cn(
-            "rounded-full py-3 items-center",
-            busy || !token.trim() ? "bg-brand-200" : "bg-brand-500"
-          )}
-        >
-          {busy ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text className="text-white text-sm font-semibold">Sign in</Text>
-          )}
-        </Pressable>
 
-        {error ? (
-          <Text className="text-xs text-red-600" selectable>
-            {error}
+        <View className="gap-1">
+          <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+            Access • JWT
           </Text>
-        ) : null}
-      </View>
-
-      <View className="bg-brand-50 border border-brand-100 rounded-2xl p-3 gap-1">
-        <Text className="text-xs font-semibold text-brand-700 uppercase">
-          Dev shortcuts
-        </Text>
-        <Text className="text-xs text-neutral-700">
-          The backend accepts tokens starting with{" "}
-          <Text className="font-mono">mock-</Text> in development. Try:
-        </Text>
-        <View className="flex-row flex-wrap gap-2 mt-1">
-          {["mock-user-demo", "mock-admin-demo"].map((mock) => (
-            <Pressable
-              key={mock}
-              onPress={() => submit(mock)}
-              disabled={busy}
-              className="bg-white border border-brand-200 px-3 py-1.5 rounded-full"
-            >
-              <Text className="text-xs text-brand-700 font-medium">{mock}</Text>
-            </Pressable>
-          ))}
+          <Text className="text-2xl font-bold text-brand-50">
+            Welcome back
+          </Text>
+          <Text className="text-sm text-cream-mute">
+            Sign in to sync your preferences, saved dishes, and AI history.
+          </Text>
         </View>
-      </View>
-    </ScrollView>
+
+        <View className="gap-2">
+          <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
+            Auth token
+          </Text>
+          <TextInput
+            value={token}
+            onChangeText={setToken}
+            placeholder="paste a JWT, or use a mock-* token"
+            placeholderTextColor={COLORS.mute}
+            className="bg-ink-900 border border-ink-700 rounded-2xl px-4 py-3 text-sm text-cream"
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+            numberOfLines={3}
+          />
+          <Pressable
+            onPress={() => submit(token)}
+            disabled={busy || !token.trim()}
+            className={cn(
+              "rounded-full py-3 items-center",
+              busy || !token.trim() ? "bg-ink-700" : "bg-brand-500 active:opacity-85"
+            )}
+          >
+            {busy ? (
+              <ActivityIndicator color={COLORS.night} />
+            ) : (
+              <Text
+                className={cn(
+                  "text-sm font-bold",
+                  busy || !token.trim() ? "text-cream-mute" : "text-night"
+                )}
+              >
+                Sign in
+              </Text>
+            )}
+          </Pressable>
+
+          {error ? (
+            <Text className="text-xs text-[#FECACA]" selectable>
+              {error}
+            </Text>
+          ) : null}
+        </View>
+
+        <View className="bg-ink-900 border border-wine rounded-2xl p-3 gap-1">
+          <Text className="text-[10px] font-bold uppercase tracking-[0.12em] text-brand-500">
+            Dev shortcuts
+          </Text>
+          <Text className="text-xs text-cream-dim">
+            The backend accepts tokens starting with{" "}
+            <Text className="font-mono">mock-</Text> in development. Try:
+          </Text>
+          <View className="flex-row flex-wrap gap-2 mt-1">
+            {["mock-user-demo", "mock-admin-demo"].map((mock) => (
+              <Pressable
+                key={mock}
+                onPress={() => submit(mock)}
+                disabled={busy}
+                className="border border-ink-700 px-3 py-1.5 rounded-full active:opacity-70"
+              >
+                <Text className="text-xs text-brand-500 font-medium">{mock}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   );
 }

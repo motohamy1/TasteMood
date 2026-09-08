@@ -14,6 +14,7 @@ import { useEffect, useMemo } from "react";
 
 import { AuthError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { COLORS } from "@/lib/theme";
 
 export default function RootLayout() {
   const queryClient = useMemo(() => {
@@ -49,7 +50,7 @@ export default function RootLayout() {
           <Stack
             screenOptions={{
               headerShown: false,
-              contentStyle: { backgroundColor: "#fff7ed" },
+              contentStyle: { backgroundColor: COLORS.ink950 },
             }}
           >
             <Stack.Screen name="(tabs)" />
@@ -60,14 +61,27 @@ export default function RootLayout() {
                 title: "All dishes",
                 headerBackTitle: "Back",
                 presentation: "card",
+                headerStyle: { backgroundColor: COLORS.ink950 },
+                headerTintColor: COLORS.cream,
+                headerTitleStyle: { color: COLORS.cream, fontWeight: "700" },
+              }}
+            />
+            <Stack.Screen
+              name="profile"
+              options={{
+                headerShown: true,
+                title: "Profile",
+                headerBackTitle: "Back",
+                presentation: "card",
+                headerStyle: { backgroundColor: COLORS.ink950 },
+                headerTintColor: COLORS.cream,
+                headerTitleStyle: { color: COLORS.cream, fontWeight: "700" },
               }}
             />
             <Stack.Screen
               name="dish/[id]"
               options={{
-                headerShown: true,
-                title: "Dish details",
-                headerBackTitle: "Back",
+                headerShown: false,
                 presentation: "card",
               }}
             />
@@ -78,10 +92,13 @@ export default function RootLayout() {
                 title: "Sign in",
                 presentation: "modal",
                 headerBackTitle: "Close",
+                headerStyle: { backgroundColor: COLORS.ink950 },
+                headerTintColor: COLORS.cream,
+                headerTitleStyle: { color: COLORS.cream, fontWeight: "700" },
               }}
             />
           </Stack>
-          <StatusBar style="dark" />
+          <StatusBar style="light" />
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

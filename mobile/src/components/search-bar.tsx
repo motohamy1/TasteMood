@@ -1,5 +1,6 @@
 import { Text, TextInput, View } from "react-native";
 import { cn } from "@/lib/cn";
+import { COLORS } from "@/lib/theme";
 
 interface Props {
   value: string;
@@ -17,17 +18,18 @@ export function SearchBar({
   return (
     <View
       className={cn(
-        "flex-row items-center gap-2 px-3 h-11 rounded-full bg-white border border-neutral-200",
+        "flex-row items-center gap-2 px-3.5 h-11 rounded-full",
+        "bg-ink-900 border border-ink-700",
         className
       )}
     >
-      <Text className="text-base">🔍</Text>
+      <Text className="text-sm">🔍</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#a3a3a3"
-        className="flex-1 text-sm text-neutral-900"
+        placeholderTextColor={COLORS.mute}
+        className="flex-1 text-[13px] text-cream"
         returnKeyType="search"
         autoCorrect={false}
         autoCapitalize="none"

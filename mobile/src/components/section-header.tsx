@@ -11,10 +11,10 @@ interface Props {
 export function SectionHeader({ title, actionLabel = "See all", actionHref }: Props) {
   return (
     <View className="flex-row items-center justify-between">
-      <Text className="text-lg font-bold text-neutral-900">{title}</Text>
+      <Text className="text-base font-bold text-cream">{title}</Text>
       {actionHref ? (
         <Link href={actionHref as never} asChild>
-          <Text className="text-xs font-semibold text-brand-600">
+          <Text className="text-xs font-semibold text-brand-500">
             {actionLabel}
           </Text>
         </Link>

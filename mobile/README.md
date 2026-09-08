@@ -17,12 +17,13 @@ React Native (Expo SDK 57) client for the TasteMood backend.
 mobile/
 ├── app/                              # expo-router file routes
 │   ├── _layout.tsx                   # Root Stack + QueryClient + Providers
+│   ├── profile.tsx                   # Profile (pushed card, opened from header icon)
 │   ├── (tabs)/
 │   │   ├── _layout.tsx               # Bottom tab bar
-│   │   ├── index.tsx                 # Home (dish discovery)
-│   │   ├── saved.tsx                 # Saved (placeholder)
-│   │   ├── ai.tsx                    # AI chat (placeholder)
-│   │   └── profile.tsx               # Profile (placeholder)
+│   │   ├── index.tsx                 # Dishes (discover home)
+│   │   ├── personality.tsx           # Personality (taste-profile + live-factor picks)
+│   │   ├── favourites.tsx            # Favourites (saved dishes)
+│   │   └── ai.tsx                    # AI chef (explore)
 │   └── dish/[id].tsx                 # Dish details
 ├── src/
 │   ├── components/                   # DishCard, SearchBar, Skeleton, ...
@@ -73,12 +74,13 @@ npm run typecheck      # tsc --noEmit
 ## What's included
 
 ✅ Working on Expo Go:
-- Tab navigation (Home / Saved / AI / Profile)
+- Tab navigation (Dishes / Personality / Favourites / AI circle) + profile icon in every tab header
 - Home: search, category pills, dish grid, pull-to-refresh
 - Dish Details: hero image, tags, ingredients, AI explanation, `VIEW_DISH` interaction, **save (heart) toggle** when signed in
 - AI tab: free-text prompt + quick-craving chips + max-price filter → `POST /recommendations`
-- Saved tab: lists the user's `SAVED` interactions fetched from `GET /interactions/me`, with optimistic remove
-- Profile tab: shows real user + preferences (spice, dietary, cuisines) editable via `PUT /me/preferences`
+- Personality tab: archetype + live-factor chips + food & drink picks derived from preferences and time-of-day via `POST /recommendations`
+- Favourites tab: lists the user's `SAVED` interactions fetched from `GET /interactions/me`, with optimistic remove
+- Profile (header icon, pushed screen): shows real user + preferences (spice, dietary, cuisines) editable via `PUT /me/preferences`
 - Auth modal (`/auth`): paste a Supabase JWT or use the dev `mock-user-*` / `mock-admin-*` shortcuts
 - Token persisted in `expo-secure-store`, hydrated on app boot
 - React Query wired to all backend endpoints
