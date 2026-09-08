@@ -79,18 +79,3 @@ export interface Dish extends DishSummary {
     freshnessScore: number;
   };
 }
-
-/** Paginated response envelope used by /dishes. */
-export interface Paginated<T> {
-  data: T[];
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
-
-// Re-export so consumers can `import { UserProfile } from "@/types/dish"`
-// alongside Dish types without a second import.
-export type { UserProfile } from "./user";

@@ -4,16 +4,11 @@ import { Pressable, Text, View } from "react-native";
 
 import type { RecommendationItem } from "@/types/recommendation";
 import { cn } from "@/lib/cn";
+import { formatDistance, formatPrice } from "@/lib/format";
 
 interface Props {
   item: RecommendationItem;
   className?: string;
-}
-
-function formatDistance(meters: number | null): string | null {
-  if (meters === null || Number.isNaN(meters)) return null;
-  if (meters < 1000) return `${Math.round(meters)} m`;
-  return `${(meters / 1000).toFixed(1)} km`;
 }
 
 export function RecommendationCard({ item, className }: Props) {
@@ -57,7 +52,7 @@ export function RecommendationCard({ item, className }: Props) {
 
           <View className="flex-row items-center justify-between mt-1">
             <Text className="text-base font-bold text-brand-600">
-              {dish.price.toFixed(0)} {dish.currency}
+              {formatPrice(dish.price, dish.currency)}
             </Text>
             {branch?.isOpen ? (
               <Text className="text-[10px] font-semibold text-emerald-600 uppercase">

@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -6,63 +5,25 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "expo-router";
 
 import { useAuthStore, selectIsSignedIn } from "@/lib/auth-store";
-import { getDish } from "@/lib/api";
 import {
-  useMyInteractions,
+  useSavedDishes,
   useUnsaveDish,
-} from "@/lib/queries";
+} from "@/lib/saved-dishes";
 import { DishCard } from "@/components/dish-card";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
 import { EmptyState } from "@/components/empty-state";
-import type { DishSummary } from "@/types/dish";
-
-/** Fetch a batch of dishes by id (skips missing). */
-function useSavedDishes(dishIds: string[]) {
-  return useQuery({
-    queryKey: ["saved-dishes", dishIds.slice().sort().join("|")],
-    enabled: dishIds.length > 0,
-    staleTime: 60_000,
-    queryFn: async () => {
-      const results = await Promise.allSettled(dishIds.map((id) => getDish(id)));
-      return results
-        .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof getDish>>> => r.status === "fulfilled")
-        .map((r) => r.value);
-    },
-  });
-}
 
 export default function SavedScreen() {
   const insets = useSafeAreaInsets();
   const isSignedIn = useAuthStore(selectIsSignedIn);
 
-  const { data: interactions, isLoading: loadingInteractions } =
-    useMyInteractions({ interactionType: "SAVED", limit: 50 });
-
-  const dishIds = useMemo(
-    () =>
-      (interactions ?? [])
-        .map((i) => i.dishId)
-        .filter((id): id is string => !!id),
-    [interactions]
-  );
-
-  const { data: dishes, isLoading: loadingDishes } = useSavedDishes(dishIds);
+  // Single saved-dishes module owns ids + list + optimistic removal — the
+  // screen no longer keeps a removedIds copy that resurrects items on refetch.
+  const { data: dishes, isLoading: loadingDishes } = useSavedDishes();
   const unsaveDishMutation = useUnsaveDish();
-
-  // Local optimistic list of removed ids so the UI updates instantly.
-  const [removedIds, setRemovedIds] = useState<string[]>([]);
-  useEffect(() => setRemovedIds([]), [interactions?.length]);
-
-  function unsave(dishId: string) {
-    setRemovedIds((prev) => [...prev, dishId]);
-    unsaveDishMutation.mutate(dishId);
-  }
-
-  const visibleDishes = (dishes ?? []).filter((d) => !removedIds.includes(d.id));
 
   return (
     <ScrollView
@@ -90,11 +51,11 @@ export default function SavedScreen() {
             </Pressable>
           </Link>
         </View>
-      ) : loadingInteractions || loadingDishes ? (
+      ) : loadingDishes ? (
         <View className="flex-row flex-wrap gap-3 mt-2">
           <DishSkeletonGrid count={4} />
         </View>
-      ) : visibleDishes.length === 0 ? (
+      ) : (dishes ?? []).length === 0 ? (
         <EmptyState
           icon="♥"
           title="Nothing saved yet"
@@ -102,11 +63,11 @@ export default function SavedScreen() {
         />
       ) : (
         <View className="flex-row flex-wrap gap-3 mt-2">
-          {visibleDishes.map((dish) => (
+          {(dishes ?? []).map((dish) => (
             <View key={dish.id} className="basis-[48%] flex-1 gap-1">
-              <DishCard dish={dish as DishSummary} />
+              <DishCard dish={dish} />
               <Pressable
-                onPress={() => unsave(dish.id)}
+                onPress={() => unsaveDishMutation.mutate(dish.id)}
                 className="bg-white border border-neutral-200 rounded-full py-1 items-center"
               >
                 <Text className="text-xs text-neutral-600">Remove</Text>

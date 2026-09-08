@@ -1,108 +1,120 @@
 import { prisma } from '../../database/prisma.client.js';
 import { CreateDishInput, QueryDishInput, UpdateDishInput } from './schema.js';
 import { Prisma } from '@prisma/client';
+import {
+  dishBrowseInclude,
+  dishDetailInclude,
+  dishRankingInclude,
+  dishSearchInclude,
+} from './includes.js';
 
-export class DishRepository {
-  async findMany(params: QueryDishInput) {
-    const {
-      page,
-      limit,
-      menuId,
-      restaurantId,
-      categoryId,
-      cuisine,
-      minPrice,
-      maxPrice,
-      search,
-      tasteAttribute,
-      mealCharacteristic,
-      dietaryProperty,
-      tag,
-    } = params;
+/**
+ * Single dish where-clause builder — shared by the paginated list query and
+ * the unbounded search/ranking reads so filter semantics never drift.
+ */
+function buildDishWhere(params: QueryDishInput): Prisma.DishWhereInput {
+  const {
+    menuId,
+    restaurantId,
+    categoryId,
+    cuisine,
+    minPrice,
+    maxPrice,
+    search,
+    tasteAttribute,
+    mealCharacteristic,
+    dietaryProperty,
+    tag,
+  } = params;
 
-    const skip = (page - 1) * limit;
-
-    const where: Prisma.DishWhereInput = {
-      status: 'ACTIVE',
-      ...(menuId ? { menuId } : {}),
-      ...(restaurantId ? { menu: { restaurantId } } : {}),
-      ...(minPrice !== undefined || maxPrice !== undefined
-        ? {
-            price: {
-              ...(minPrice !== undefined ? { gte: minPrice } : {}),
-              ...(maxPrice !== undefined ? { lte: maxPrice } : {}),
-            },
-          }
-        : {}),
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { description: { contains: search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-      ...(categoryId
-        ? {
-            categories: {
-              some: { categoryId },
-            },
-          }
-        : {}),
-      ...(cuisine
-        ? {
-            menu: {
-              restaurant: {
-                cuisines: {
-                  some: {
-                    cuisine: {
-                      OR: [
-                        { name: { contains: cuisine, mode: 'insensitive' } },
-                        { slug: { contains: cuisine, mode: 'insensitive' } },
-                      ],
-                    },
+  return {
+    status: 'ACTIVE',
+    ...(menuId ? { menuId } : {}),
+    ...(restaurantId ? { menu: { restaurantId } } : {}),
+    ...(minPrice !== undefined || maxPrice !== undefined
+      ? {
+          price: {
+            ...(minPrice !== undefined ? { gte: minPrice } : {}),
+            ...(maxPrice !== undefined ? { lte: maxPrice } : {}),
+          },
+        }
+      : {}),
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+    ...(categoryId
+      ? {
+          categories: {
+            some: { categoryId },
+          },
+        }
+      : {}),
+    ...(cuisine
+      ? {
+          menu: {
+            restaurant: {
+              cuisines: {
+                some: {
+                  cuisine: {
+                    OR: [
+                      { name: { contains: cuisine, mode: 'insensitive' } },
+                      { slug: { contains: cuisine, mode: 'insensitive' } },
+                    ],
                   },
                 },
               },
             },
-          }
-        : {}),
-      ...(tag
-        ? {
-            tags: {
-              some: {
-                tag: {
-                  OR: [
-                    { name: { contains: tag, mode: 'insensitive' } },
-                    { slug: { contains: tag, mode: 'insensitive' } },
-                  ],
-                },
+          },
+        }
+      : {}),
+    ...(tag
+      ? {
+          tags: {
+            some: {
+              tag: {
+                OR: [
+                  { name: { contains: tag, mode: 'insensitive' } },
+                  { slug: { contains: tag, mode: 'insensitive' } },
+                ],
               },
             },
-          }
-        : {}),
-      ...(tasteAttribute
-        ? {
-            attributes: {
-              tasteAttributes: { has: tasteAttribute },
-            },
-          }
-        : {}),
-      ...(mealCharacteristic
-        ? {
-            attributes: {
-              mealCharacteristics: { has: mealCharacteristic },
-            },
-          }
-        : {}),
-      ...(dietaryProperty
-        ? {
-            attributes: {
-              dietaryProperties: { has: dietaryProperty },
-            },
-          }
-        : {}),
-    };
+          },
+        }
+      : {}),
+    ...(tasteAttribute
+      ? {
+          attributes: {
+            tasteAttributes: { has: tasteAttribute },
+          },
+        }
+      : {}),
+    ...(mealCharacteristic
+      ? {
+          attributes: {
+            mealCharacteristics: { has: mealCharacteristic },
+          },
+        }
+      : {}),
+    ...(dietaryProperty
+      ? {
+          attributes: {
+            dietaryProperties: { has: dietaryProperty },
+          },
+        }
+      : {}),
+  };
+}
+
+export class DishRepository {
+  async findMany(params: QueryDishInput) {
+    const { page, limit } = params;
+    const skip = (page - 1) * limit;
+    const where = buildDishWhere(params);
 
     const [total, items] = await Promise.all([
       prisma.dish.count({ where }),
@@ -111,26 +123,7 @@ export class DishRepository {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: {
-          attributes: true,
-          categories: { include: { category: true } },
-          tags: { include: { tag: true } },
-          ingredients: { include: { ingredient: true } },
-          menu: {
-            include: {
-              restaurant: {
-                include: {
-                  cuisines: { include: { cuisine: true } },
-                  branches: {
-                    where: { status: 'ACTIVE' },
-                    orderBy: { createdAt: 'asc' },
-                    take: 1,
-                  },
-                },
-              },
-            },
-          },
-        },
+        include: dishBrowseInclude,
       }),
     ]);
 
@@ -146,30 +139,31 @@ export class DishRepository {
   async findById(id: string) {
     return prisma.dish.findUnique({
       where: { id },
-      include: {
-        attributes: true,
-        categories: { include: { category: true } },
-        tags: { include: { tag: true } },
-        ingredients: { include: { ingredient: true } },
-        priceHistory: {
-          orderBy: { effectiveFrom: 'desc' },
-        },
-        menu: {
-          include: {
-            restaurant: {
-              include: {
-                cuisines: { include: { cuisine: true } },
-                branches: {
-                  where: { status: 'ACTIVE' },
-                  include: {
-                    operatingHours: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+      include: dishDetailInclude,
+    });
+  }
+
+  /**
+   * Unpaginated dish read for in-memory enrichment (search, geo filtering).
+   * Branches carry operating hours so open-now can be evaluated per row.
+   */
+  async searchMatching(params: QueryDishInput) {
+    return prisma.dish.findMany({
+      where: buildDishWhere(params),
+      orderBy: { createdAt: 'desc' },
+      include: dishSearchInclude,
+    });
+  }
+
+  /**
+   * Unpaginated candidate read for the ranking pipeline. Callers provide the
+   * hard-constraint where clause; the relation graph lives here.
+   */
+  async findRankingPool(where: Prisma.DishWhereInput) {
+    return prisma.dish.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: dishRankingInclude,
     });
   }
 

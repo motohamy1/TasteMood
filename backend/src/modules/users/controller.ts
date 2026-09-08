@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { userService } from './service.js';
-import { AppError } from '../../common/errors/app-error.js';
+import { requireCaller } from '../../common/types/identity.js';
 
 export class UserController {
   async getMe(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.user) throw AppError.unauthorized();
-      const profile = await userService.getProfile(req.user.id);
+      const caller = requireCaller(req);
+      const profile = await userService.getProfile(caller.id);
       res.json({ success: true, data: profile });
     } catch (error) {
       next(error);
@@ -15,8 +15,8 @@ export class UserController {
 
   async updateMe(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.user) throw AppError.unauthorized();
-      const profile = await userService.updateProfile(req.user.id, req.body);
+      const caller = requireCaller(req);
+      const profile = await userService.updateProfile(caller.id, req.body);
       res.json({ success: true, data: profile });
     } catch (error) {
       next(error);

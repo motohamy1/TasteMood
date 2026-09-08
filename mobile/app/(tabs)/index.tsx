@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   FlatList,
   RefreshControl,
@@ -10,6 +10,7 @@ import { Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDishes } from "@/lib/queries";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { DishCard } from "@/components/dish-card";
 import { FeaturedCard } from "@/components/featured-card";
 import { SectionHeader } from "@/components/section-header";
@@ -47,11 +48,7 @@ export default function HomeScreen() {
 
   // Debounce the raw input into the query params (WR-03): without this every
   // keystroke is a new /dishes request and burns the rate-limit budget.
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
-    return () => clearTimeout(t);
-  }, [search]);
+  const debouncedSearch = useDebouncedValue(search.trim());
 
   const params = useMemo(
     () => ({

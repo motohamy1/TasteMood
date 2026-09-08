@@ -2,11 +2,57 @@ import { DEFAULT_RANKING_WEIGHTS, RankingWeights, SURPRISE_MODE_WEIGHTS } from '
 import { UserPreferenceProfile } from '@prisma/client';
 import { StructuredIntent } from '../../ai/intent/intent.schema.js';
 
-export interface ScoredCandidate {
-  dish: any;
-  restaurant: any;
-  branch: any;
+/**
+ * Structural minimum of a dish/restaurant/branch the scorer reads. Full Prisma
+ * rows satisfy these shapes, and so do hand-built test fixtures — the scorer no
+ * longer depends on a specific repository include shape.
+ */
+export interface RankableDish {
+  id: string;
+  name: string;
+  price: number;
+  currency?: string | null;
+  verificationStatus?: string | null;
+  attributes?: {
+    tasteAttributes?: string[];
+    mealCharacteristics?: string[];
+  } | null;
+  tags?: Array<{ tag: { name: string } }> | null;
+}
+
+export interface RankableRestaurant {
+  id?: string;
+  name: string;
+  priceRange?: string | null;
+  logoUrl?: string | null;
+  verificationStatus?: string | null;
+  cuisines?: Array<{ cuisine: { name: string } }> | null;
+}
+
+export interface RankableBranch {
+  id?: string;
+  name?: string;
+  address?: string | null;
+  latitude?: number;
+  longitude?: number;
+  operatingHours?: Array<{
+    dayOfWeek: number;
+    openTime: string;
+    closeTime: string;
+    isClosed: boolean;
+  }> | null;
+}
+
+export interface CandidateInput<DishT extends RankableDish = RankableDish> {
+  dish: DishT;
+  restaurant: RankableRestaurant;
+  branch: RankableBranch;
   distanceKm?: number;
+  interactionsCount?: number;
+}
+
+export interface ScoredCandidate<DishT extends RankableDish = RankableDish>
+  extends CandidateInput<DishT> {
   score: number;
   scoreBreakdown: {
     preferenceMatch: number;
@@ -22,24 +68,18 @@ export class RankingService {
   /**
    * Scores a candidate based on configurable weights and deterministic scoring rules.
    */
-  scoreCandidate(
-    candidate: {
-      dish: any;
-      restaurant: any;
-      branch: any;
-      distanceKm?: number;
-      interactionsCount?: number;
-    },
+  scoreCandidate<DishT extends RankableDish>(
+    candidate: CandidateInput<DishT>,
     intent: StructuredIntent,
     userProfile?: UserPreferenceProfile | null,
     weights: RankingWeights = intent.surpriseMe ? SURPRISE_MODE_WEIGHTS : DEFAULT_RANKING_WEIGHTS
-  ): ScoredCandidate {
+  ): ScoredCandidate<DishT> {
     const { dish, restaurant, branch, distanceKm, interactionsCount = 0 } = candidate;
 
     // 1. Preference Match (0 to 1)
     let preferenceMatch = 0.5; // Neutral default
     if (userProfile) {
-      const restaurantCuisines = restaurant.cuisines?.map((c: any) => c.cuisine.name.toLowerCase()) || [];
+      const restaurantCuisines = restaurant.cuisines?.map((c) => c.cuisine.name.toLowerCase()) || [];
       const hasPreferredCuisine = userProfile.preferredCuisines.some((pc) =>
         restaurantCuisines.includes(pc.toLowerCase())
       );
