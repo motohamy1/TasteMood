@@ -7,8 +7,10 @@
 interface DishLike {
   id: string;
   name: string;
+  nameEn?: string | null;
   slug: string;
   description: string | null;
+  descriptionEn?: string | null;
   price: number;
   currency: string;
   imageUrl: string | null;
@@ -28,6 +30,7 @@ interface DishLike {
     restaurant?: {
       id: string;
       name: string;
+      nameEn?: string | null;
       cuisines?: { cuisine: { name: string } }[];
       branches?: { id: string; name: string }[];
     } | null;
@@ -37,8 +40,10 @@ interface DishLike {
 export interface DishDTO {
   id: string;
   name: string;
+  nameEn: string | null;
   slug: string;
   description: string | null;
+  descriptionEn: string | null;
   price: number;
   currency: string;
   imageUrl: string | null;
@@ -46,6 +51,7 @@ export interface DishDTO {
   verificationStatus: string;
   restaurantId: string;
   restaurantName: string;
+  restaurantNameEn: string | null;
   branchId?: string;
   branchName?: string;
   menuId: string;
@@ -65,8 +71,10 @@ export function presentDish(dish: DishLike): DishDTO {
   return {
     id: dish.id,
     name: dish.name,
+    nameEn: dish.nameEn ?? null,
     slug: dish.slug,
     description: dish.description,
+    descriptionEn: dish.descriptionEn ?? null,
     price: dish.price,
     currency: dish.currency,
     imageUrl: dish.imageUrl,
@@ -74,6 +82,7 @@ export function presentDish(dish: DishLike): DishDTO {
     verificationStatus: dish.verificationStatus,
     restaurantId: restaurant?.id ?? dish.menu?.restaurantId ?? '',
     restaurantName: restaurant?.name ?? '',
+    restaurantNameEn: restaurant?.nameEn ?? null,
     branchId: firstBranch?.id,
     branchName: firstBranch?.name,
     menuId: dish.menuId,

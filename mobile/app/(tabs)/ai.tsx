@@ -22,6 +22,7 @@ import {
   QUICK_PROMPTS,
   buildRecommendationRequest,
 } from "@/lib/recommendations";
+import { useT } from "@/i18n";
 import type { RecommendationRequest } from "@/types/recommendation";
 
 function CapsLabel({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,7 @@ function CapsLabel({ children }: { children: React.ReactNode }) {
  */
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
+  const t = useT();
   const [query, setQuery] = useState("");
   const [activePrompt, setActivePrompt] = useState<number | null>(null);
   const [activeMood, setActiveMood] = useState<number | null>(null);
@@ -125,15 +127,14 @@ export default function ExploreScreen() {
             <View className="flex-row items-center gap-1.5">
               <View className="w-2 h-2 rounded-full bg-brand-500" />
               <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
-                AI chef • Online
+                {t("ai.chefOnline")}
               </Text>
             </View>
             <Text className="text-2xl font-bold text-brand-50">
-              What are you craving?
+              {t("home.cravingTitle")}
             </Text>
             <Text className="text-sm text-cream-mute leading-5">
-              Describe a craving or pick a mood — the AI chef maps it to real
-              dishes near you.
+              {t("ai.subtitle")}
             </Text>
           </View>
           <ProfileButton />
@@ -145,7 +146,7 @@ export default function ExploreScreen() {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="e.g. something spicy under 250 EGP…"
+              placeholder={t("ai.inputPlaceholder")}
               placeholderTextColor={COLORS.mute}
               className="flex-1 text-[13px] text-cream"
               returnKeyType="search"
@@ -162,7 +163,7 @@ export default function ExploreScreen() {
             <Pressable
               onPress={handleSubmit}
               accessibilityRole="button"
-              accessibilityLabel="Find dishes"
+              accessibilityLabel={t("ai.findDishes")}
               className="w-9 h-9 rounded-full bg-brand-500 items-center justify-center active:opacity-85"
             >
               <Text className="text-[16px] font-bold text-night">↑</Text>
@@ -175,7 +176,7 @@ export default function ExploreScreen() {
               const isActive = i === activePrompt;
               return (
                 <Pressable
-                  key={p.label}
+                  key={p.labelKey}
                   onPress={() => togglePrompt(i)}
                   className={cn(
                     "px-3 py-1.5 rounded-full border",
@@ -192,7 +193,7 @@ export default function ExploreScreen() {
                         : "font-medium text-cream"
                     )}
                   >
-                    {p.label}
+                    {t(p.labelKey)}
                   </Text>
                 </Pressable>
               );
@@ -202,13 +203,13 @@ export default function ExploreScreen() {
 
         {/* Moods */}
         <View className="px-4 gap-2">
-          <CapsLabel>Browse by mood</CapsLabel>
+          <CapsLabel>{t("ai.browseByMood")}</CapsLabel>
           <View className="flex-row flex-wrap gap-1.5">
             {MOODS.map((m, i) => {
               const isActive = i === activeMood;
               return (
                 <Pressable
-                  key={m.label}
+                  key={m.labelKey}
                   onPress={() => toggleMood(i)}
                   className={cn(
                     "flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border",
@@ -226,7 +227,7 @@ export default function ExploreScreen() {
                         : "font-medium text-cream"
                     )}
                   >
-                    {m.label}
+                    {t(m.labelKey)}
                   </Text>
                 </Pressable>
               );
@@ -300,7 +301,7 @@ export default function ExploreScreen() {
             <View className="gap-3">
               <View className="flex-row items-center gap-1.5 bg-ink-900 border border-ink-700 rounded-xl px-2.5 py-2 self-start">
                 <ActivityIndicator size="small" color={COLORS.amber} />
-                <CapsLabel>Loading • AI chef thinking</CapsLabel>
+                <CapsLabel>{t("ai.thinking")}</CapsLabel>
               </View>
               <View className="flex-row flex-wrap gap-3">
                 <DishSkeletonGrid count={4} />
@@ -310,25 +311,24 @@ export default function ExploreScreen() {
             <View className="flex-row items-center gap-1.5 bg-brand-950 border border-[#7F1D1D] rounded-xl px-2.5 py-2">
               <Text className="text-xs">⚠️</Text>
               <Text className="text-[10px] font-semibold uppercase text-[#FECACA] flex-1">
-                {(error as Error)?.message ??
-                  "The AI service may be rate-limited — retry in a minute."}
+                {(error as Error)?.message ?? t("ai.rateLimited")}
               </Text>
             </View>
           ) : submitted === null ? (
             <EmptyState
               icon="🧭"
-              title="What are you craving?"
-              description="Tap a mood or type a request to get started."
+              title={t("ai.emptyTitle")}
+              description={t("ai.emptyDesc")}
             />
           ) : recs.length === 0 ? (
             <EmptyState
               icon="🤔"
-              title="No matches"
-              description="Try loosening your filters."
+              title={t("ai.noMatches")}
+              description={t("ai.noMatchesDesc")}
             />
           ) : (
             <View className="gap-3">
-              <CapsLabel>For you • {recs.length} picks</CapsLabel>
+              <CapsLabel>{t("ai.forYou", { count: recs.length })}</CapsLabel>
               <View className="flex-row flex-wrap gap-3">
                 {recs.map((item) => (
                   <View key={item.dish.id} className="basis-[48%] flex-1">

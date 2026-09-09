@@ -1,3 +1,4 @@
+import type { TranslationKey } from "@/i18n/dictionaries";
 import type { RecommendationRequest } from "@/types/recommendation";
 
 /**
@@ -8,23 +9,27 @@ import type { RecommendationRequest } from "@/types/recommendation";
  */
 
 export const QUICK_PROMPTS: Array<{
-  label: string;
+  labelKey: TranslationKey;
   payload: Partial<RecommendationRequest>;
 }> = [
-  { label: "🌶 Spicy & under 200 EGP", payload: { maxPrice: 200, tasteAttributes: ["SPICY"] } },
-  { label: "🥗 Healthy & light", payload: { mealTypes: ["LIGHT"] } },
-  { label: "🍰 Sweet treat", payload: { tasteAttributes: ["SWEET"], mealTypes: ["DESSERT"] } },
-  { label: "🌱 Vegan", payload: { dietaryRestrictions: ["VEGAN"] } },
-  { label: "🎲 Surprise me", payload: { surpriseMe: true } },
+  { labelKey: "ai.promptSpicy", payload: { maxPrice: 200, tasteAttributes: ["SPICY"] } },
+  { labelKey: "ai.promptHealthy", payload: { mealTypes: ["LIGHT"] } },
+  { labelKey: "ai.promptSweet", payload: { tasteAttributes: ["SWEET"], mealTypes: ["DESSERT"] } },
+  { labelKey: "ai.promptVegan", payload: { dietaryRestrictions: ["VEGAN"] } },
+  { labelKey: "ai.promptSurprise", payload: { surpriseMe: true } },
 ];
 
-export const MOODS: Array<{ emoji: string; label: string; query: string }> = [
-  { emoji: "🔥", label: "Spicy", query: "something spicy with bold flavors" },
-  { emoji: "🥗", label: "Light", query: "something light and healthy" },
-  { emoji: "🍔", label: "Comfort", query: "comfort food, rich and filling" },
-  { emoji: "🍰", label: "Sweet", query: "a sweet dessert" },
-  { emoji: "🌱", label: "Vegan", query: "vegan dish" },
-  { emoji: "🌙", label: "Late night", query: "quick late night snack" },
+export const MOODS: Array<{
+  emoji: string;
+  labelKey: TranslationKey;
+  query: string;
+}> = [
+  { emoji: "🔥", labelKey: "ai.moodSpicy", query: "something spicy with bold flavors" },
+  { emoji: "🥗", labelKey: "ai.moodLight", query: "something light and healthy" },
+  { emoji: "🍔", labelKey: "ai.moodComfort", query: "comfort food, rich and filling" },
+  { emoji: "🍰", labelKey: "ai.moodSweet", query: "a sweet dessert" },
+  { emoji: "🌱", labelKey: "ai.moodVegan", query: "vegan dish" },
+  { emoji: "🌙", labelKey: "ai.moodLateNight", query: "quick late night snack" },
 ];
 
 export interface RecommendationSelections {

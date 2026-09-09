@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(git log gardeneel --oneline -20 2>/dev/null; echo \"---DIFF main...gardeneel---\"; git diff --stat main gardeneel 2>/dev/null | tail -30; echo \"---MERGED---\"; git branch --merged main; echo \"---NOT MERGED---\"; git branch --no-merged main)",
+      "Shell(git:*)",
+      "Shell(echo \"HEAD is: $(git rev-parse --abbrev-ref HEAD)\"; echo \"=== rev-list left-right counts ===\"; git rev-list --left-right --count main gardeneel | cat; echo \"=== on main not on gardeneel ===\"; git log --oneline gardeneel..main | cat; echo \"=== on gardeneel not on main ===\"; git log --oneline main..gardeneel | cat)",
+      "Shell(dir /b backend\\.env 2>nul & dir /b backend\\node_modules 2>nul | findstr /c:\"prisma\" /c:\".bin\" & echo --- & git show HEAD:backend/prisma/schema.prisma > \"%TEMP%\\tastemood-baseline.prisma\" && echo baseline-extracted %TEMP%\\tastemood-baseline.prisma)",
+      "Shell(cd backend && mkdir prisma\\migrations\\20260101000000_init prisma\\migrations\\20260101000100_import_pipeline 2>nul & npx prisma migrate diff --from-empty --to-schema-datamodel %TEMP%\\tastemood-baseline.prisma --script > prisma\\migrations\\20260101000000_init\\migration.sql && echo BASELINE-OK && npx prisma migrate diff --from-schema-datamodel %TEMP%\\tastemood-baseline.prisma --to-schema-datamodel prisma\\schema.prisma --script > prisma\\migrations\\20260101000100_import_pipeline\\migration.sql && echo DELTA-OK && type prisma\\migrations\\20260101000100_import_pipeline\\migration.sql)",
+      "Shell(npx prisma migrate resolve --applied 20260101000000_init)",
+      "Shell(npx prisma migrate deploy)",
+      "Shell(npx prisma generate)",
+      "Shell(tasklist:*)",
+      "Shell(findstr:*)",
+      "Shell(netstat:*)",
+      "Shell(wmic:*)",
+      "Shell(more:*)",
+      "Shell(npx tsc --noEmit 2 >& 1)",
+      "Shell(npm:*)",
+      "Shell(powershell -NoProfile -Command \"Test-NetConnection aws-0-eu-central-1.pooler.supabase.com -Port 6543 | Select-Object -Property TcpTestSucceeded; Test-NetConnection aws-0-eu-central-1.pooler.supabase.com -Port 5432 | Select-Object -Property TcpTestSucceeded\")",
+      "Shell(timeout /t 2 /nobreak >nul & curl -s http://localhost:5000/api/v1/dishes/cuisines | head -c 600 & echo. & curl -s \"http://localhost:5000/api/v1/dishes?limit=2\" | head -c 400)",
+      "Shell(curl -s http://localhost:5000/api/v1/dishes/cuisines)",
+      "Shell(npx tsx src/server.ts 2 >& 1)",
+      "Shell(npx tsx src/server.ts)",
+      "Shell(ping -n 6 127.0.0.1 >nul & curl -s http://localhost:5000/api/v1/dishes/cuisines)",
+      "Shell(npx tsx scripts/diag-db.ts 2 >& 1)",
+      "Shell(cd backend && npx tsx src/server.ts 1>\"%TEMP%\\tm-srv.log\" 2>&1 & type \"%TEMP%\\tm-srv.log\")",
+      "Shell(type:*)",
+      "Shell(cd backend && start \"\" /min cmd /c \"npx tsx src/server.ts > %TEMP%\\tm-server.log 2>&1\" && ping -n 8 127.0.0.1 >nul & curl -s http://localhost:5000/api/v1/dishes/cuisines)",
+      "Shell(curl -s http://localhost:5000/api/v1/dishes?limit=3)",
+      "Shell(echo.:*)",
+      "Shell(npx tsx -e import { prisma } from './src/database/prisma.client.js'; (async () => { const r = await prisma.restaurant.count({ where: { source: 'OSM' } }); const b = await prisma.branch.count({ where: { source: 'OSM' } }); const draft = await prisma.dish.count(); console.log(JSON.stringify({ osmRestaurants: r, osmBranches: b, totalDishes: draft })); await prisma.(); })())"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

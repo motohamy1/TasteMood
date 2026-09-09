@@ -311,6 +311,15 @@ export class DishRepository {
       where: { id },
     });
   }
+
+  /** Cuisines that actually have restaurants — drives the mobile filter pills. */
+  async findCuisines() {
+    return prisma.cuisine.findMany({
+      where: { restaurants: { some: {} } },
+      select: { slug: true, name: true, nameAr: true },
+      orderBy: { name: 'asc' },
+    });
+  }
 }
 
 export const dishRepository = new DishRepository();

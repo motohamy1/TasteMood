@@ -13,6 +13,9 @@ router.get(
   (req, res, next) => dishController.getDishes(req, res, next)
 );
 
+// Registered before '/:id' so "cuisines" is not swallowed as an id.
+router.get('/cuisines', (req, res, next) => dishController.getCuisines(req, res, next));
+
 router.get('/:id', (req, res, next) =>
   dishController.getDishById(req, res, next)
 );

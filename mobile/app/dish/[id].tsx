@@ -22,9 +22,14 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { COLORS } from "@/lib/theme";
 import { AmbientGlow } from "@/components/ambient-glow";
+import { displayDescription, displayName, useLang, useT } from "@/i18n";
 import { formatPrice } from "@/lib/format";
 
-const SPICE_LEVELS = ["Mild", "Medium", "Hot"] as const;
+const SPICE_LEVELS = [
+  { value: "Mild", labelKey: "dish.mild", emoji: "🌱" },
+  { value: "Medium", labelKey: "dish.medium", emoji: "🌶" },
+  { value: "Hot", labelKey: "dish.hot", emoji: "🔥" },
+] as const;
 
 function MetaLabel({ children }: { children: string }) {
   return (
@@ -43,6 +48,8 @@ function MetaLabel({ children }: { children: string }) {
 export default function DishDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const lang = useLang();
   const { data: dish, isLoading, isError, error, refetch } = useDish(id);
   const isSignedIn = useAuthStore(selectIsSignedIn);
 
@@ -55,7 +62,7 @@ export default function DishDetailsScreen() {
   const recordViewDish = useRecordViewDish();
 
   const [portion, setPortion] = useState(1);
-  const [spice, setSpice] = useState<(typeof SPICE_LEVELS)[number]>("Medium");
+  const [spice, setSpice] = useState<(typeof SPICE_LEVELS)[number]["value"]>("Medium");
   const [toppings, setToppings] = useState<string[]>([]);
 
   // Fire a VIEW_DISH interaction once the dish loads (signed-in users only —
@@ -86,7 +93,7 @@ export default function DishDetailsScreen() {
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-ink-950">
-        <Stack.Screen options={{ title: "Loading…" }} />
+        <Stack.Screen options={{ title: t("dish.loading") }} />
         <ActivityIndicator size="large" color={COLORS.amber} />
       </View>
     );
@@ -95,19 +102,19 @@ export default function DishDetailsScreen() {
   if (isError || !dish) {
     return (
       <View className="flex-1 items-center justify-center bg-ink-950 px-6">
-        <Stack.Screen options={{ title: "Not found" }} />
+        <Stack.Screen options={{ title: t("dish.notFound") }} />
         <Text className="text-5xl mb-2">⚠️</Text>
         <Text className="text-lg font-semibold text-cream text-center">
-          We couldn&apos;t load this dish
+          {t("dish.notFoundTitle")}
         </Text>
         <Text className="text-sm text-cream-mute text-center mt-1">
-          {(error as Error)?.message ?? "Please try again later."}
+          {(error as Error)?.message ?? t("dish.notFoundDesc")}
         </Text>
         <Pressable
           onPress={() => refetch()}
           className="mt-4 px-4 py-2 rounded-full bg-brand-500"
         >
-          <Text className="text-night text-sm font-bold">Retry</Text>
+          <Text className="text-night text-sm font-bold">{t("common.retry")}</Text>
         </Pressable>
       </View>
     );
@@ -122,7 +129,7 @@ export default function DishDetailsScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
         showsVerticalScrollIndicator={false}
       >
-        <Stack.Screen options={{ title: "Dish Detail" }} />
+        <Stack.Screen options={{ title: t("dish.detail") }} />
 
         {/* Top row */}
         <View
@@ -135,7 +142,7 @@ export default function DishDetailsScreen() {
             </Pressable>
           </Link>
           <Text className="flex-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
-            Dish • {dish.cuisine}
+            {t("dish.dish")} • {dish.cuisine}
           </Text>
           {isSignedIn ? (
             <Pressable
@@ -151,7 +158,7 @@ export default function DishDetailsScreen() {
             <Link href="/auth" asChild>
               <Pressable hitSlop={8} className="px-2 py-1">
                 <Text className="text-[11px] text-brand-500 font-bold">
-                  Sign in
+                  {t("common.signIn")}
                 </Text>
               </Pressable>
             </Link>
@@ -179,10 +186,10 @@ export default function DishDetailsScreen() {
         <View className="px-4 pt-4 gap-4">
           <View className="gap-1">
             <Text className="text-[22px] font-bold text-brand-50 leading-[26px]">
-              {dish.name}
+              {displayName(lang, dish)}
             </Text>
             <Text className="text-xs text-cream-mute">
-              {dish.restaurantName}
+              {displayName(lang, { name: dish.restaurantName, nameEn: dish.restaurantNameEn })}
               {dish.branchName ? ` · ${dish.branchName}` : ""}
               {dish.cuisine ? ` · ${dish.cuisine}` : ""}
             </Text>
@@ -190,11 +197,18 @@ export default function DishDetailsScreen() {
               <Text className="text-xl font-extrabold text-brand-500">
                 {formatPrice(dish.price, dish.currency)}
               </Text>
+              {dish.verificationStatus === "UNVERIFIED" ? (
+                <View className="px-1.5 py-px rounded-full border border-ink-700">
+                  <Text className="text-[8px] font-semibold text-cream-mute">
+                    {t("dish.estimated")}
+                  </Text>
+                </View>
+              ) : null}
               {typeof dish.rating === "number" ? (
                 <Text className="text-xs text-brand-50">
                   ★ {dish.rating.toFixed(1)}
                   {dish.reviewCount && dish.reviewCount > 0
-                    ? ` · ${dish.reviewCount} reviews`
+                    ? ` · ${dish.reviewCount} ${t("dish.reviews")}`
                     : ""}
                 </Text>
               ) : null}
@@ -202,15 +216,15 @@ export default function DishDetailsScreen() {
           </View>
 
           <View className="gap-2">
-            {dish.description ? (
+            {displayDescription(lang, dish) ? (
               <Text className="text-[13px] text-cream-dim leading-5">
-                {dish.description}
+                {displayDescription(lang, dish)}
               </Text>
             ) : null}
 
             {dish.tasteAttributes.length > 0 && (
               <View className="flex-row items-center flex-wrap gap-1.5">
-                <MetaLabel>Taste</MetaLabel>
+                <MetaLabel>{t("dish.taste")}</MetaLabel>
                 {dish.tasteAttributes.map((tag) => (
                   <View key={tag} className="bg-wine px-2.5 py-1 rounded-full">
                     <Text className="text-[11px] font-semibold text-cream uppercase">
@@ -223,7 +237,7 @@ export default function DishDetailsScreen() {
 
             {dish.dietaryProperties.length > 0 && (
               <View className="flex-row items-center flex-wrap gap-1.5">
-                <MetaLabel>Dietary</MetaLabel>
+                <MetaLabel>{t("dish.dietary")}</MetaLabel>
                 {dish.dietaryProperties.map((tag) => (
                   <View
                     key={tag}
@@ -239,7 +253,7 @@ export default function DishDetailsScreen() {
 
             {dish.ingredients.length > 0 && (
               <View className="flex-row items-center flex-wrap gap-1.5">
-                <MetaLabel>Ingredients</MetaLabel>
+                <MetaLabel>{t("dish.ingredients")}</MetaLabel>
                 {dish.ingredients.map((ing) => (
                   <View
                     key={ing}
@@ -255,7 +269,7 @@ export default function DishDetailsScreen() {
           {dish.aiExplanation ? (
             <View className="bg-brand-50 border border-brand-100 rounded-[14px] p-2.5 gap-0.5">
               <Text className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-600">
-                Why this dish?
+                {t("dish.whyThisDish")}
               </Text>
               <Text className="text-xs text-brand-900 leading-4">
                 {dish.aiExplanation}
@@ -298,7 +312,7 @@ export default function DishDetailsScreen() {
                     isSaved ? "text-cream" : "text-night"
                   )}
                 >
-                  {isSaved ? "Saved ♥" : "Save ♥"}
+                  {isSaved ? t("common.saved") : t("common.save")}
                 </Text>
               </Pressable>
             ) : null}
@@ -307,12 +321,12 @@ export default function DishDetailsScreen() {
           {/* Customize panel */}
           <View className="gap-2.5">
             <Text className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-500">
-              Customize to your taste
+              {t("dish.customize")}
             </Text>
 
             <View className="flex-row items-center justify-between bg-ink-900 border border-ink-700 rounded-xl px-3.5 py-2.5">
               <Text className="text-[13px] font-semibold text-cream">
-                Portion
+                {t("dish.portion")}
               </Text>
               <View className="flex-row items-center gap-3">
                 <Pressable
@@ -335,15 +349,15 @@ export default function DishDetailsScreen() {
 
             <View className="bg-ink-900 border border-ink-700 rounded-xl px-3.5 py-2.5 gap-2">
               <Text className="text-[13px] font-semibold text-cream">
-                Spice level
+                {t("dish.spiceLevel")}
               </Text>
               <View className="flex-row gap-1.5">
                 {SPICE_LEVELS.map((level) => {
-                  const active = spice === level;
+                  const active = spice === level.value;
                   return (
                     <Pressable
-                      key={level}
-                      onPress={() => setSpice(level)}
+                      key={level.value}
+                      onPress={() => setSpice(level.value)}
                       className={cn(
                         "flex-1 py-1.5 rounded-full items-center border",
                         active
@@ -357,8 +371,7 @@ export default function DishDetailsScreen() {
                           active ? "font-semibold text-night" : "text-cream-mute"
                         )}
                       >
-                        {level === "Mild" ? "🌱 " : level === "Medium" ? "🌶 " : "🔥 "}
-                        {level}
+                        {level.emoji} {t(level.labelKey)}
                       </Text>
                     </Pressable>
                   );
@@ -369,7 +382,7 @@ export default function DishDetailsScreen() {
             {dish.ingredients.length > 0 ? (
               <View className="gap-1.5">
                 <Text className="text-[13px] font-semibold text-cream">
-                  Toppings
+                  {t("dish.toppings")}
                 </Text>
                 <View className="flex-row flex-wrap gap-1.5">
                   {dish.ingredients.map((ing) => {
@@ -404,7 +417,7 @@ export default function DishDetailsScreen() {
             {dish.tags.length > 0 ? (
               <View className="gap-1.5">
                 <Text className="text-[13px] font-semibold text-cream">
-                  Side options
+                  {t("dish.sideOptions")}
                 </Text>
                 <ScrollView
                   horizontal

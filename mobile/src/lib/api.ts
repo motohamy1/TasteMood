@@ -155,6 +155,17 @@ export function getDish(id: string) {
   return request<Dish>(`/dishes/${encodeURIComponent(id)}`);
 }
 
+/** Cuisine filter option from GET /dishes/cuisines (drives the filter pills). */
+export interface CuisineOption {
+  slug: string;
+  name: string;
+  nameAr: string | null;
+}
+
+export function getCuisines() {
+  return request<CuisineOption[]>("/dishes/cuisines");
+}
+
 export function getRecommendations(payload: RecommendationRequest) {
   return request<RecommendationResponse>("/recommendations", {
     method: "POST",

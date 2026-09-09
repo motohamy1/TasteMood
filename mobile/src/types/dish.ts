@@ -40,8 +40,10 @@ export type DietaryProperty =
 export interface DishSummary {
   id: string;
   name: string;
+  nameEn?: string | null;
   slug: string;
-  description?: string;
+  description?: string | null;
+  descriptionEn?: string | null;
   price: number;
   currency: string;
   imageUrl?: string;
@@ -53,6 +55,7 @@ export interface DishSummary {
   calories?: number;
   prepTimeMinutes?: number;
   restaurantName: string;
+  restaurantNameEn?: string | null;
   branchName?: string;
   category: string;
   cuisine: string;

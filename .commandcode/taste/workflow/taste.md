@@ -1,0 +1,10 @@
+# Workflow & Communication
+
+- Before interviewing or asking the user questions, thoroughly explores the repo and recent git history to ground questions in actual facts of the codebase ("facts are my job, not yours"). Only asks questions that depend on what the user hasn't decided yet. Confidence: 0.9
+- Establishes the "frontier" explicitly: asks the root/blocking questions first, then explains how each answer will unfold follow-ups, keeping the interview structured. Confidence: 0.8
+- Explains options with their trade-offs before acting, and offers to run commands but lets the user decide on the risky/remote steps. Confidence: 0.8
+- Refuses to build scrapers that violate a service's ToS (e.g., Talabat/Elmenus menu data) — flags the conflict with the user's other constraints and proposes compliant alternatives instead. Confidence: 0.7
+- Numbers and letter-labels interview question rounds so the user can answer tersely by option letter ("q3 - d", "q5 - 100% free"); the user reliably replies with short letter-only answers. Confidence: 0.6
+- When offered options with a recommendation, frequently overrides the suggested pragmatic minimum in favor of the more thorough/maximal choice (import everything, real FK tables, real photos, keep Arabic names; confirmed again by stacking OSM+Overture+Foursquare, importer-synthesized names, full AI enrichment, and full bilingual UI — each over a recommended lighter option) — state a recommendation but expect bolder picks. Confidence: 0.75
+- For large AI-generation/bulk-import runs, prefers batching: produce a first small batch, review it, then scale city-by-city — keeps the human-review loop tight and stays inside free-tier limits instead of one giant run. Confidence: 0.7
+- When the interview frontier is exhausted, consolidates every locked decision into a single end-to-end design summary (goal, sources, behavior, schema, explicit action items for the user) and asks for confirmation before writing any code — shared understanding is gated before implementation starts. Confidence: 0.6

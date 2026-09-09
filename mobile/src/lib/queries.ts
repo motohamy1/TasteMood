@@ -13,11 +13,13 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  getCuisines,
   getDish,
   getDishes,
   getMyPreferences,
   getRecommendations,
   updateMyPreferences,
+  type CuisineOption,
 } from "./api";
 import type { DishSummary } from "@/types/dish";
 import type { RecommendationRequest } from "@/types/recommendation";
@@ -28,6 +30,7 @@ export const queryKeys = {
   dishes: (params: Parameters<typeof getDishes>[0] = {}) =>
     ["dishes", params] as const,
   dish: (id: string) => ["dish", id] as const,
+  cuisines: ["cuisines"] as const,
   recommendations: (req: RecommendationRequest) =>
     ["recommendations", req] as const,
   preferences: ["preferences", "me"] as const,
@@ -61,6 +64,17 @@ export function useDish(id: string | undefined) {
     queryFn: () => getDish(id as string),
     enabled: !!id,
     staleTime: 60_000,
+  });
+}
+
+export function useCuisines(
+  options?: Omit<UseQueryOptions<CuisineOption[], Error>, "queryKey" | "queryFn">
+) {
+  return useQuery({
+    queryKey: queryKeys.cuisines,
+    queryFn: getCuisines,
+    staleTime: 5 * 60_000,
+    ...options,
   });
 }
 

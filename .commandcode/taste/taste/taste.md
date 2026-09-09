@@ -1,0 +1,19 @@
+# Taste
+- Prefers to start new work from a branch/worktree that is at the same commit as main, and asks to verify up-to-dateness against main before beginning. Confidence: 0.4
+- When presented with a multi-item list of review/recommendation findings, prefers applying all of them in one go ("apply all") rather than being asked to choose or prioritize which to do first. Confidence: 0.6
+- TasteMood is a real production app, not a demo/portfolio: real, accurate place data matters. Scope starts with the whole Dakahlia governorate (including rural districts, not just Mansoura) then expands to all of Egypt. Confidence: 0.9
+- Prefers bilingual data (Arabic + English) wherever the source provides it — locals search in Arabic. Confidence: 0.8
+- When a place/dish name is Arabic-only, prefers keeping the Arabic as-is (no AI transliteration/translation) and fixing LTR/RTL text-direction rendering in the UI instead. Confidence: 0.8
+- Wants ingested data to pass through a review step before going live (repeatable importer + admin review), not dumped straight into production — the review surface is Prisma Studio (DRAFT/UNVERIFIED statuses) rather than a custom admin UI until the pipeline proves itself. Confidence: 0.8
+- Insists on a 100% free ($0) pipeline/toolchain — explicitly declined paid Google Places even within its free-credit tier when offered ("q5 - 100% free"). Confidence: 0.9
+- Prefers maximal data coverage over curation: imports everything tagged food/drink (even unnamed places) rather than applying a quality floor, and pushed for a free+scraping hybrid to "fetch as much as possible". Confidence: 0.8
+- Prefers non-destructive, idempotent data lifecycles: upsert by external ID (osmId), mark vanished places INACTIVE instead of deleting, never destructive resets of user-facing data. Confidence: 0.8
+- For reference/geographic data, prefers properly normalized tables with FKs (Governorate/City) over denormalized string columns, even when strings would be the cheaper option. Confidence: 0.7
+- Prefers real sourced photos (e.g. Wikimedia Commons) over placeholders or AI-generated imagery. Confidence: 0.7
+- Accepts AI-generated draft content at scale (typical menus per cuisine) as long as it is flagged and a flagship subset is hand-verified — automation for breadth, humans for truthfulness. Confidence: 0.7
+- When depending on a single free-tier provider (e.g., Gemini for AI enrichment), explicitly wants a second free provider wired in as fallback for when the primary fails or its free tier runs out — no single points of failure in the toolchain. Confidence: 0.8
+- AI enrichment passes should draft the complete record (menu items + dish attributes + cuisine mapping + priceRange + atmosphere tags), not just the minimum fields — imported places must recommend and filter well immediately. Confidence: 0.7
+- Prefers a curated canonical taxonomy (e.g., ~20 Egyptian-relevant cuisines incl. Egyptian, Grills, Koshary, Café) with an explicit mapping table from raw source tags (OSM `cuisine=*`, unknowns → "Other") over auto-creating a row per distinct raw tag. Confidence: 0.7
+- Prefers fixing data at import time over UI fallbacks: synthesizes names for unnamed places from tags + street rather than showing generic category labels or hiding them. Confidence: 0.6
+- Wants a full bilingual (EN + AR only) app UI with i18n now, not deferred as a separate later project: full RTL layout mirroring (native Arabic feel, I18nManager, layout audit across screens) rather than text-direction-only rendering, and language switching that defaults to the device locale with a persisted in-app override. Confidence: 0.8
+- Seeds complete reference data up front (all 27 Egyptian governorates + Dakahlia's cities) with importer auto-create on demand during expansion, rather than minimal seeding. Confidence: 0.6

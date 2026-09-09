@@ -28,10 +28,14 @@ export interface RecommendationRequest {
 export interface RecommendationDish {
   id: string;
   name: string;
+  nameEn?: string | null;
   description: string | null;
+  descriptionEn?: string | null;
   price: number;
   currency: string;
   imageUrl: string | null;
+  status?: string;
+  verificationStatus?: string | null;
   tasteAttributes: TasteAttribute[];
   mealCharacteristics: MealCharacteristic[];
   dietaryProperties: DietaryProperty[];
@@ -41,6 +45,7 @@ export interface RecommendationDish {
 export interface RecommendationRestaurant {
   id: string;
   name: string;
+  nameEn?: string | null;
   priceRange: string;
   logoUrl: string | null;
   cuisines: string[];

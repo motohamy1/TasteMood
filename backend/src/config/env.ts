@@ -22,6 +22,14 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional().default(''),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
 
+  // Free-tier fallback chain used by the menu enrichment pipeline:
+  // Gemini → Groq → OpenRouter (all optional; missing keys drop out of the chain).
+  FSQ_API_KEY: z.string().optional().default(''),
+  GROQ_API_KEY: z.string().optional().default(''),
+  GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
+  OPENROUTER_API_KEY: z.string().optional().default(''),
+  OPENROUTER_MODEL: z.string().default('meta-llama/llama-3.3-70b-instruct:free'),
+
   DEFAULT_CURRENCY: z.string().default('EGP'),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(900000), // 15 mins
   RATE_LIMIT_MAX: z.coerce.number().default(100),

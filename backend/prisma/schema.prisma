@@ -143,12 +143,44 @@ model UserInteraction {
 }
 
 // ==========================================
+// GEOGRAPHY
+// ==========================================
+
+model Governorate {
+  id       String  @id @default(uuid())
+  nameEn   String  @unique
+  nameAr   String  @unique
+  slug     String  @unique
+  cities   City[]
+  branches Branch[]
+
+  @@map("governorates")
+}
+
+model City {
+  id            String      @id @default(uuid())
+  governorateId String
+  governorate   Governorate @relation(fields: [governorateId], references: [id], onDelete: Cascade)
+  nameEn        String
+  nameAr        String
+  slug          String
+  latitude      Float?
+  longitude     Float?
+  branches      Branch[]
+
+  @@unique([governorateId, slug])
+  @@index([nameEn])
+  @@map("cities")
+}
+
+// ==========================================
 // RESTAURANT & BRANCH
 // ==========================================
 
 model Restaurant {
   id                 String             @id @default(uuid())
   name               String
+  nameEn             String?
   slug               String             @unique
   description        String?
   priceRange         PriceRange         @default(MODERATE)
@@ -158,6 +190,7 @@ model Restaurant {
   source             String             @default("MANUAL")
   logoUrl            String?
   coverImageUrl      String?
+  photoAttribution   String?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -173,6 +206,7 @@ model Restaurant {
 model Cuisine {
   id          String   @id @default(uuid())
   name        String   @unique
+  nameAr      String?
   slug        String   @unique
   description String?
   createdAt   DateTime @default(now())
@@ -197,12 +231,19 @@ model Branch {
   restaurantId       String
   restaurant         Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   name               String
+  nameEn             String?
   address            String
   latitude           Float
   longitude          Float
   phone              String?
   status             RecordStatus       @default(ACTIVE)
   verificationStatus VerificationStatus @default(UNVERIFIED)
+  source             String             @default("MANUAL")
+  externalId         String?            @unique
+  governorateId      String?
+  governorate        Governorate?       @relation(fields: [governorateId], references: [id], onDelete: SetNull)
+  cityId             String?
+  city               City?              @relation(fields: [cityId], references: [id], onDelete: SetNull)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -213,6 +254,8 @@ model Branch {
 
   @@index([restaurantId])
   @@index([latitude, longitude])
+  @@index([cityId])
+  @@index([governorateId])
   @@map("branches")
 }
 
@@ -282,8 +325,10 @@ model Dish {
   menuId             String
   menu               Menu               @relation(fields: [menuId], references: [id], onDelete: Cascade)
   name               String
+  nameEn             String?
   slug               String
   description        String?
+  descriptionEn      String?
   price              Float
   currency           String             @default("EGP")
   imageUrl           String?

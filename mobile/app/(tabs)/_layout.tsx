@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { cn } from "@/lib/cn";
 import { tabIcon } from "@/components/tab-icons";
+import { useT } from "@/i18n";
 import { AI_BUTTON_GLOW, COLORS } from "@/lib/theme";
 
 /**
@@ -92,6 +93,8 @@ function CustomTabBar({ state, navigation }: any) {
 }
 
 export default function TabsLayout() {
+  const t = useT();
+
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
@@ -99,10 +102,10 @@ export default function TabsLayout() {
         headerShown: false,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Dishes" }} />
-      <Tabs.Screen name="personality" options={{ title: "Personality" }} />
-      <Tabs.Screen name="favourites" options={{ title: "Favourites" }} />
-      <Tabs.Screen name="ai" options={{ title: "AI chef" }} />
+      <Tabs.Screen name="index" options={{ title: t("home.discover") }} />
+      <Tabs.Screen name="personality" options={{ title: t("personality.title") }} />
+      <Tabs.Screen name="favourites" options={{ title: t("favourites.saved") }} />
+      <Tabs.Screen name="ai" options={{ title: t("ai.chefOnline") }} />
     </Tabs>
   );
 }

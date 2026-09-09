@@ -10,13 +10,25 @@ import {
 } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { I18nManager } from "react-native";
 import { useEffect, useMemo } from "react";
 
 import { AuthError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { useLanguageStore } from "@/i18n";
 import { COLORS } from "@/lib/theme";
 
+// Full RTL mirroring for Arabic (Q25): mirrored layout is applied whenever the
+// stored language is Arabic — takes effect on app start/restart.
+I18nManager.allowRTL(true);
+
 export default function RootLayout() {
+  const hydrateLanguage = useLanguageStore((s) => s.hydrate);
+
+  useEffect(() => {
+    void hydrateLanguage();
+  }, [hydrateLanguage]);
+
   const queryClient = useMemo(() => {
     // Session expiry (WR-06): any authed call rejecting with 401 means the
     // stored token is dead — sign out instead of failing silently forever.

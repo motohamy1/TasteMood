@@ -231,6 +231,7 @@ export class RecommendationService {
       restaurant: {
         id: candidate.restaurant.id ?? '',
         name: candidate.restaurant.name,
+        nameEn: candidate.restaurant.nameEn ?? null,
         priceRange: candidate.restaurant.priceRange ?? null,
         logoUrl: candidate.restaurant.logoUrl ?? null,
         cuisines: (candidate.restaurant.cuisines ?? []).map((c) => c.cuisine.name),

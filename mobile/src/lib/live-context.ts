@@ -10,8 +10,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import * as Location from "expo-location";
+import type { PersonalityMealSlot, WeatherCondition } from "@/lib/personality";
 
-export type MealSlot = "breakfast" | "lunch" | "dinner" | "late-night";
+export type MealSlot = PersonalityMealSlot;
 
 export interface TimeInfo {
   /** e.g. "7:42 PM" */
@@ -25,8 +26,11 @@ export interface LiveContext {
   unavailable: boolean;
   tempC: number | null;
   condition: string | null;
+  weatherCategory: WeatherCondition | null;
   emoji: string | null;
   city: string | null;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export function timeInfo(now: Date = new Date()): TimeInfo {
@@ -62,14 +66,29 @@ function describeWeather(code: number): { emoji: string; label: string } {
   return { emoji: "🌡️", label: "mild" };
 }
 
+function categorizeWeather(
+  code: number,
+  temperature: number
+): WeatherCondition {
+  if (code >= 71 && code <= 77) return "cold";
+  if ((code >= 51 && code <= 69) || (code >= 80 && code <= 99)) return "rainy";
+  if (temperature >= 30) return "hot";
+  if (temperature <= 16) return "cold";
+  if (code <= 2) return "dry";
+  return "mild";
+}
+
 export function useLiveContext(): LiveContext {
   const [state, setState] = useState<LiveContext>({
     loading: true,
     unavailable: false,
     tempC: null,
     condition: null,
+    weatherCategory: null,
     emoji: null,
     city: null,
+    latitude: null,
+    longitude: null,
   });
 
   useEffect(() => {
@@ -98,6 +117,7 @@ export function useLiveContext(): LiveContext {
 
         let tempC: number | null = null;
         let condition: string | null = null;
+        let weatherCategory: WeatherCondition | null = null;
         let emoji: string | null = null;
         if (weatherRes.status === "fulfilled") {
           const current = weatherRes.value?.current;
@@ -106,6 +126,10 @@ export function useLiveContext(): LiveContext {
             const w = describeWeather(Number(current.weather_code ?? -1));
             condition = w.label;
             emoji = w.emoji;
+            weatherCategory = categorizeWeather(
+              Number(current.weather_code ?? -1),
+              tempC
+            );
           }
         }
         const city =
@@ -122,8 +146,11 @@ export function useLiveContext(): LiveContext {
           unavailable: noData,
           tempC,
           condition,
+          weatherCategory,
           emoji,
           city,
+          latitude: lat,
+          longitude: lon,
         });
       } catch {
         if (!cancelled) {

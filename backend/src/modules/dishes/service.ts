@@ -38,6 +38,10 @@ export class DishService {
     await this.getDishById(id);
     return dishRepository.delete(id);
   }
+
+  async getCuisines() {
+    return dishRepository.findCuisines();
+  }
 }
 
 export const dishService = new DishService();

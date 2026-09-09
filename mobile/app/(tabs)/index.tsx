@@ -9,7 +9,7 @@ import {
 import { Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useDishes } from "@/lib/queries";
+import { useCuisines, useDishes } from "@/lib/queries";
 import { ProfileButton } from "@/components/profile-button";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { DishCard } from "@/components/dish-card";
@@ -20,37 +20,34 @@ import { CategoryPills } from "@/components/category-pills";
 import { SearchBar } from "@/components/search-bar";
 import { EmptyState } from "@/components/empty-state";
 import { AmbientGlow } from "@/components/ambient-glow";
-
-const CATEGORIES = [
-  "All",
-  "Italian",
-  "Japanese",
-  "Burgers",
-  "Asian",
-  "Desserts",
-  "Healthy",
-  "Spicy",
-];
-
-function greeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-}
+import { pickLabel, useLang, useT } from "@/i18n";
 
 /**
- * Home (Discover): greeting header, search, categories,
+ * Home (Discover): greeting header, search, cuisine pills (API-driven),
  * featured carousel, then the filterable dish grid.
  */
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const lang = useLang();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
 
   // Debounce the raw input into the query params (WR-03): without this every
   // keystroke is a new /dishes request and burns the rate-limit budget.
   const debouncedSearch = useDebouncedValue(search.trim());
+
+  const { data: cuisines } = useCuisines();
+  const pillOptions = useMemo(
+    () => [
+      { value: "All", label: t("common.all") },
+      ...(cuisines ?? []).map((c) => ({
+        value: c.name,
+        label: pickLabel(lang, c.name, c.nameAr ?? undefined),
+      })),
+    ],
+    [cuisines, lang, t]
+  );
 
   const params = useMemo(
     () => ({
@@ -68,6 +65,14 @@ export default function HomeScreen() {
   const featured = useMemo(() => dishes.slice(0, 5), [dishes]);
   const grid = useMemo(() => dishes.slice(5), [dishes]);
   const isFiltering = debouncedSearch !== "" || category !== "All";
+
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12
+      ? t("home.greetingMorning")
+      : hour < 18
+        ? t("home.greetingAfternoon")
+        : t("home.greetingEvening");
 
   return (
     <View className="flex-1 bg-ink-950 overflow-hidden">
@@ -97,14 +102,14 @@ export default function HomeScreen() {
             <View className="flex-row items-center gap-1.5">
               <View className="w-2 h-2 rounded-full bg-brand-500" />
               <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
-                Discover • {greeting()}
+                {t("home.discover")} • {greeting}
               </Text>
             </View>
             <Text className="text-2xl font-bold text-brand-50">
-              What are you craving?
+              {t("home.cravingTitle")}
             </Text>
             <Text className="text-[13px] text-cream-mute">
-              AI-curated dishes tailored to your taste.
+              {t("home.cravingSubtitle")}
             </Text>
           </View>
           <ProfileButton />
@@ -117,7 +122,7 @@ export default function HomeScreen() {
         <View>
           <View className="mb-2">
             <CategoryPills
-              options={CATEGORIES}
+              options={pillOptions}
               selected={category}
               onSelect={setCategory}
             />
@@ -128,7 +133,7 @@ export default function HomeScreen() {
           <View className="px-4">
             <EmptyState
               icon="⚠️"
-              title="Couldn't load dishes"
+              title={t("home.loadError")}
               description={
                 (error as Error)?.message ??
                 "Check your backend is running and EXPO_PUBLIC_API_URL is correct."
@@ -143,8 +148,8 @@ export default function HomeScreen() {
           <View className="px-4">
             <EmptyState
               icon="🔍"
-              title="No dishes found"
-              description="Try a different search or category."
+              title={t("home.noDishes")}
+              description={t("home.noDishesDesc")}
             />
           </View>
         ) : (
@@ -152,7 +157,7 @@ export default function HomeScreen() {
             {!isFiltering && featured.length > 0 ? (
               <View className="gap-2">
                 <View className="px-4">
-                  <SectionHeader title="Featured" actionHref="/dishes" />
+                  <SectionHeader title={t("home.featured")} actionHref="/dishes" />
                 </View>
                 <FlatList
                   data={featured}
@@ -170,7 +175,7 @@ export default function HomeScreen() {
 
             <View className="px-4 gap-3">
               <SectionHeader
-                title={isFiltering ? "Results" : "Popular near you"}
+                title={isFiltering ? t("home.results") : t("home.popularNearYou")}
                 actionHref="/dishes"
               />
               <View className="flex-row flex-wrap gap-2.5">
@@ -183,7 +188,7 @@ export default function HomeScreen() {
               {!isFiltering && dishes.length > 5 ? (
                 <Link href="/dishes" asChild>
                   <Text className="text-center text-sm font-semibold text-brand-500 mt-1">
-                    Browse all dishes →
+                    {t("home.browseAll")}
                   </Text>
                 </Link>
               ) : null}

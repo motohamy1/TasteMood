@@ -23,6 +23,7 @@ export interface RankableDish {
 export interface RankableRestaurant {
   id?: string;
   name: string;
+  nameEn?: string | null;
   priceRange?: string | null;
   logoUrl?: string | null;
   verificationStatus?: string | null;

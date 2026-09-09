@@ -1,60 +1,106 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useMyPreferences, useRecommendations } from "@/lib/queries";
-import { useAuthStore, selectIsSignedIn } from "@/lib/auth-store";
+import { useMyPreferences, useRecommendations, useUpdateMyPreferences } from "@/lib/queries";
+import { useAuthStore, selectIsSignedIn, selectUser } from "@/lib/auth-store";
 import {
   formatDistance,
   useClock,
   useLiveContext,
-  type MealSlot,
 } from "@/lib/live-context";
+import {
+  CUISINE_OPTIONS,
+  DISCOVERY_OPTIONS,
+  PERSONALITY_MOODS,
+  SLOT_LABELS,
+  WEATHER_OPTIONS,
+  buildPersonalityRequest,
+  getPersonalityMetadata,
+  getProfileCompleteness,
+  profileSignature,
+  type DiscoveryPreference,
+  type PersonalityMealSlot,
+  type ProfileCompleteness,
+  type WeatherCondition,
+} from "@/lib/personality";
+import {
+  emptyPersonalitySession,
+  readPersonalitySession,
+  todayKey,
+  writePersonalitySession,
+  type PersonalitySession,
+} from "@/lib/personality-session";
 import { RecommendationCard } from "@/components/recommendation-card";
 import { ProfileButton } from "@/components/profile-button";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { AmbientGlow } from "@/components/ambient-glow";
+import { cn } from "@/lib/cn";
+import { COLORS } from "@/lib/theme";
+import { pickLabel, useLang, useT } from "@/i18n";
+import { recordInteraction } from "@/lib/api";
 import type { RecommendationItem, RecommendationRequest } from "@/types/recommendation";
-import type { MealCharacteristic } from "@/types/dish";
+import type { DietaryProperty } from "@/types/dish";
+import type { UserPreferences } from "@/types/user";
+import type { InteractionType } from "@/types/interaction";
+import type { TranslationKey } from "@/i18n/dictionaries";
 
-const PICK_LIMIT = 6;
-const DRINK_LIMIT = 4;
-const GRID_CAP = 4;
+const DIETARY_OPTIONS: Array<{
+  labelKey: TranslationKey;
+  value: DietaryProperty[];
+}> = [
+  { labelKey: "personality.noRestrictions", value: [] },
+  { labelKey: "personality.vegetarian", value: ["VEGETARIAN"] },
+  { labelKey: "personality.vegan", value: ["VEGAN"] },
+  { labelKey: "personality.halal", value: ["HALAL"] },
+];
 
-const SLOT_LABELS: Record<MealSlot, { word: string; emoji: string }> = {
-  breakfast: { word: "breakfast", emoji: "🌅" },
-  lunch: { word: "lunch", emoji: "🕛" },
-  dinner: { word: "dinner", emoji: "🌆" },
-  "late-night": { word: "late-night", emoji: "🌙" },
+const SPICE_OPTIONS: Array<{ value: number; labelKey: TranslationKey }> = [
+  { value: 0, labelKey: "personality.spice0" },
+  { value: 1, labelKey: "personality.spice1" },
+  { value: 2, labelKey: "personality.spice2" },
+  { value: 3, labelKey: "personality.spice3" },
+  { value: 4, labelKey: "personality.spice4" },
+  { value: 5, labelKey: "personality.spice5" },
+];
+
+const PROFILE_STATUS_LABEL: Record<ProfileCompleteness, TranslationKey> = {
+  NOT_STARTED: "personality.statusNotStarted",
+  IN_PROGRESS: "personality.statusInProgress",
+  READY: "personality.statusReady",
 };
 
-const SLOT_MEALS: Record<MealSlot, MealCharacteristic> = {
-  breakfast: "BREAKFAST",
-  lunch: "LUNCH",
-  dinner: "DINNER",
-  "late-night": "SNACK",
-};
+const SETUP_STEP_LABELS: TranslationKey[] = [
+  "personality.stepTaste",
+  "personality.stepDietary",
+  "personality.stepHeat",
+  "personality.stepDiscovery",
+];
 
-const PRICE_CAPS: Record<string, number | undefined> = {
-  BUDGET: 150,
-  MODERATE: 350,
-  EXPENSIVE: 800,
-  LUXURY: undefined,
-};
+interface AppliedSnapshot {
+  profile: string;
+  mood: string | null;
+  weather: WeatherCondition | null;
+  mealSlot: PersonalityMealSlot | null;
+  freeText: string;
+  radiusKm: number;
+}
 
-function archetypeName(spice: number, cuisines: number): string {
-  if (spice >= 4 && cuisines >= 3) return "THE SPICY EXPLORER";
-  if (spice >= 3) return "THE HEAT SEEKER";
-  if (spice <= 1 && cuisines <= 1) return "THE COMFORT PURIST";
-  return "THE CURIOUS GRAZER";
+function archetypeKey(spice: number, cuisines: number): TranslationKey {
+  if (spice >= 4 && cuisines >= 3) return "personality.archetypeSpicyExplorer";
+  if (spice >= 3) return "personality.archetypeHeatSeeker";
+  if (spice <= 1 && cuisines <= 1) return "personality.archetypeComfortPurist";
+  return "personality.archetypeCuriousGrazer";
 }
 
 function dedupe(items: RecommendationItem[]): RecommendationItem[] {
@@ -67,33 +113,27 @@ function dedupe(items: RecommendationItem[]): RecommendationItem[] {
   });
 }
 
-/** Food first, drinks woven in after every other pick — Paper shows one mixed grid. */
-function interleave(food: RecommendationItem[], drinks: RecommendationItem[]) {
-  const out: RecommendationItem[] = [];
-  const seen = new Set<string>();
-  // A dish can appear in BOTH result sets (a beverage-tagged "food" hit) —
-  // dedupe across the merged list or the duplicate React key crashes the grid.
-  const push = (item: RecommendationItem | undefined) => {
-    const id = item?.dish?.id;
-    if (id && !seen.has(id)) {
-      seen.add(id);
-      out.push(item);
-    }
-  };
-  const max = Math.max(food.length, drinks.length);
-  for (let i = 0; i < max; i++) {
-    push(food[i]);
-    if (i % 2 === 0) push(drinks[i]);
-  }
-  return out.slice(0, GRID_CAP);
-}
-
-function FactorChip({ emoji, label }: { emoji: string; label: string }) {
+function ToggleChip({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
   return (
-    <View className="flex-row items-center gap-[5px] rounded-full bg-ink-900 border border-ink-700 py-1.5 px-[11px]">
-      <Text className="text-[11px] leading-[14px]">{emoji}</Text>
-      <Text className="text-[11px] leading-[14px] text-cream">{label}</Text>
-    </View>
+    <Pressable
+      onPress={onPress}
+      className={cn(
+        "px-2.5 py-1.5 rounded-full border active:opacity-80",
+        active ? "bg-brand-500 border-brand-500" : "border-ink-700"
+      )}
+    >
+      <Text className={cn("text-[11px]", active ? "font-semibold text-night" : "text-cream")}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -105,284 +145,583 @@ function TraitBar({ label, pct }: { label: string; pct: number }) {
         <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.1em] text-cream-mute">
           {label}
         </Text>
-        <Text className="text-[9px] leading-[12px] font-bold text-brand-50">
-          {clamped}%
-        </Text>
+        <Text className="text-[9px] leading-[12px] font-bold text-brand-50">{clamped}%</Text>
       </View>
       <View className="h-[4px] rounded-[2px] bg-ink-700 overflow-hidden">
-        <View
-          className="h-[4px] rounded-[2px] bg-brand-500"
-          style={{ width: `${clamped}%` }}
-        />
+        <View className="h-[4px] rounded-[2px] bg-brand-500" style={{ width: `${clamped}%` }} />
       </View>
     </View>
   );
 }
 
-/**
- * Personality — mirrors the Paper artboard 1:1: archetype card with trait
- * bars, five live-factor chips (weather, time-of-day, place + distance,
- * budget, state), a mixed food+drinks pick grid and a "why these fit"
- * footer. Two structured POST /recommendations fire per factor change only.
- */
+function firstIncompleteSetupStep(prefs?: UserPreferences | null): number {
+  if (!prefs) return 0;
+  const metadata = getPersonalityMetadata(prefs);
+  if (!prefs.preferredCuisines.length) return 0;
+  if (!metadata.dietaryConfirmed && !prefs.dietaryRestrictions.length) return 1;
+  if (!metadata.spiceConfirmed && prefs.spicePreference === 2) return 2;
+  if (!metadata.discoveryPreference) return 3;
+  return 0;
+}
+
+type FeedbackType = Extract<InteractionType, "LIKE" | "DISLIKE" | "NOT_INTERESTED">;
+
+interface RecommendationResultsProps {
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  refetch: () => Promise<unknown>;
+  picks: RecommendationItem[];
+  weather: WeatherCondition | null;
+  radiusKm: number;
+  setRadiusKm: (radiusKm: number) => void;
+  onIgnoreWeather: () => void;
+  feedback: Record<string, InteractionType>;
+  onFeedback?: (item: RecommendationItem, type: FeedbackType) => void;
+}
+
+function RecommendationResults({
+  isLoading,
+  isError,
+  error,
+  refetch,
+  picks,
+  weather,
+  radiusKm,
+  setRadiusKm,
+  onIgnoreWeather,
+  feedback,
+  onFeedback,
+}: RecommendationResultsProps) {
+  const t = useT();
+
+  return (
+    <>
+      <View className="px-4 gap-2.5">
+        <View className="flex-row items-baseline justify-between">
+          <Text className="text-[13px] leading-[16px] font-bold text-brand-50">{t("personality.todaysPicks")}</Text>
+          <Text className="text-[10px] leading-[12px] font-semibold text-brand-500">{picks.length ? t("personality.matched", { count: picks.length }) : ""}</Text>
+        </View>
+        {isLoading ? (
+          <View className="flex-row flex-wrap gap-2.5"><DishSkeletonGrid count={4} /></View>
+        ) : isError ? (
+          <View className="flex-row items-center gap-1.5 bg-brand-950 border border-[#7F1D1D] rounded-xl px-2.5 py-2">
+            <Text className="text-xs">⚠️</Text>
+            <Text className="text-[10px] font-semibold uppercase text-[#FECACA] flex-1">
+              {error?.message ?? t("personality.unavailable")}
+            </Text>
+            <Pressable onPress={() => void refetch()}><Text className="text-[10px] font-bold text-brand-500">{t("common.retry")}</Text></Pressable>
+          </View>
+        ) : picks.length === 0 ? (
+          <View className="gap-2">
+            <EmptyState icon="🤔" title={t("personality.noCloseMatches")} description={t("personality.noCloseMatchesDesc")} />
+            <View className="flex-row gap-2">
+              {weather ? <Pressable onPress={onIgnoreWeather} className="flex-1 border border-ink-700 rounded-full py-2 items-center"><Text className="text-[10px] font-semibold text-cream">{t("personality.ignoreWeather")}</Text></Pressable> : null}
+              {radiusKm === 10 ? <Pressable onPress={() => setRadiusKm(25)} className="flex-1 border border-ink-700 rounded-full py-2 items-center"><Text className="text-[10px] font-semibold text-cream">{t("personality.widen25")}</Text></Pressable> : null}
+            </View>
+          </View>
+        ) : (
+          <View className="flex-row flex-wrap gap-2.5">
+            {picks.map((item) => (
+              <View key={item.dish.id} className="basis-[48%] flex-1">
+                <RecommendationCard
+                  item={item}
+                  onFeedback={onFeedback ? (type) => onFeedback(item, type) : undefined}
+                />
+                {feedback[item.dish.id] ? <Text className="text-[9px] text-brand-500 text-center mt-1">{t("personality.signalSaved")}</Text> : null}
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {picks.length > 0 ? (
+        <View className="px-4">
+          <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-2">
+            <Text className="text-[13px] leading-[16px] font-bold text-brand-50">{t("personality.whyTheseFit")}</Text>
+            <Text className="text-[11px] leading-[15px] text-cream-mute">
+              {picks[0]?.reason ?? t("personality.whyTheseFit")}
+            </Text>
+            <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.04em] text-brand-500">
+              {t("personality.aiInterprets")}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
 export default function PersonalityScreen() {
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const lang = useLang();
   const isSignedIn = useAuthStore(selectIsSignedIn);
+  const user = useAuthStore(selectUser);
   const { data: prefs, isLoading: loadingPrefs } = useMyPreferences();
+  const updatePrefs = useUpdateMyPreferences();
 
   const clock = useClock();
   const live = useLiveContext();
-  const [clockTick, setClockTick] = useState(0);
+  const [session, setSession] = useState<PersonalitySession>(emptyPersonalitySession);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [profileDraft, setProfileDraft] = useState<UserPreferences | null>(null);
+  const [submitted, setSubmitted] = useState<RecommendationRequest | null>(null);
+  const [applied, setApplied] = useState<AppliedSnapshot | null>(null);
+  const [freeText, setFreeText] = useState("");
+  const [radiusKm, setRadiusKm] = useState(10);
+  const [setupStep, setSetupStep] = useState(0);
+  const [savingSetup, setSavingSetup] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Record<string, InteractionType>>({});
 
-  const slot = SLOT_LABELS[clock.slot];
-  const meal = SLOT_MEALS[clock.slot];
+  const effectivePrefs = profileDraft ?? prefs;
+  const profileStatus = getProfileCompleteness(effectivePrefs);
+  const metadata = getPersonalityMetadata(effectivePrefs);
+  const discoveryPreference: DiscoveryPreference = metadata.discoveryPreference ?? "FAMILIAR";
+  const weather = session.weatherEnabled
+    ? session.weatherOverride ?? live.weatherCategory
+    : null;
+  const mealSlot = session.timeEnabled
+    ? session.mealSlotOverride ?? clock.slot
+    : null;
 
-  const spice = prefs?.spicePreference ?? 0;
-  const cuisines = prefs?.preferredCuisines ?? [];
-  const diet = prefs?.dietaryRestrictions ?? [];
-  const maxPrice = prefs?.preferredPriceRange
-    ? PRICE_CAPS[prefs.preferredPriceRange]
-    : undefined;
+  useEffect(() => {
+    setSessionReady(false);
+    setProfileDraft(null);
+    setSubmitted(null);
+    setApplied(null);
+    setFreeText("");
+    setRadiusKm(10);
+    setFeedback({});
+  }, [isSignedIn, user?.id]);
 
-  const foodPayload: RecommendationRequest = useMemo(
-    () => ({
-      mealTypes: [meal],
-      cuisines: cuisines.length ? cuisines : undefined,
-      tasteAttributes: spice >= 3 ? ["SPICY"] : undefined,
-      dietaryRestrictions: diet.length ? diet : undefined,
-      maxPrice,
-      limit: PICK_LIMIT,
-    }),
-    // clockTick keeps the payload key fresh on pull-to-refresh
-    [meal, spice, maxPrice, diet.join(","), cuisines.join(","), clockTick]
-  );
+  useEffect(() => {
+    if (prefs) setProfileDraft(prefs);
+  }, [prefs]);
 
-  const drinkPayload: RecommendationRequest = useMemo(
-    () => ({ mealTypes: ["BEVERAGE"], limit: DRINK_LIMIT }),
-    [clockTick]
-  );
+  useEffect(() => {
+    let active = true;
+    if (!isSignedIn) {
+      setSession(emptyPersonalitySession());
+      setSessionReady(true);
+      return () => {
+        active = false;
+      };
+    }
 
-  const food = useRecommendations(foodPayload);
-  const drinks = useRecommendations(drinkPayload);
+    void readPersonalitySession(user?.id).then((stored) => {
+      if (!active) return;
+      setSession(stored);
+      setSessionReady(true);
+    });
 
-  const picks = useMemo(() => interleave(
-    dedupe(food.data?.recommendations ?? []),
-    dedupe(drinks.data?.recommendations ?? [])
-  ), [food.data, drinks.data]);
+    return () => {
+      active = false;
+    };
+  }, [isSignedIn, user?.id]);
 
-  const avgMatch = useMemo(() => {
-    const all = dedupe(food.data?.recommendations ?? []);
-    if (all.length === 0) return null;
-    const raw = all.reduce((acc, p) => acc + (p.score ?? 0), 0) / all.length;
-    return Math.round(raw <= 1 ? raw * 100 : raw);
-  }, [food.data]);
+  useEffect(() => {
+    if (profileStatus !== "READY") {
+      setSetupStep((current) => Math.max(current, firstIncompleteSetupStep(effectivePrefs)));
+    }
+  }, [effectivePrefs, profileStatus]);
 
-  const nearestDistance = formatDistance(food.data?.recommendations?.[0]?.distanceMeters);
-
-  const refreshing = food.isRefetching || drinks.isRefetching;
-  function onRefresh() {
-    setClockTick((t) => t + 1);
-    void food.refetch();
-    void drinks.refetch();
+  function currentSnapshot(nextPrefs = effectivePrefs): AppliedSnapshot {
+    return {
+      profile: profileSignature(nextPrefs),
+      mood: session.mood,
+      weather,
+      mealSlot,
+      freeText: freeText.trim(),
+      radiusKm,
+    };
   }
 
-  const heatPct = spice * 20;
-  const adventurePct =
-    cuisines.length * 25 + (diet.length ? 0 : 12) + Math.min(12, spice * 3);
+  function requestFor(nextPrefs = effectivePrefs): RecommendationRequest {
+    return buildPersonalityRequest({
+      prefs: nextPrefs,
+      mood: session.mood,
+      weather,
+      mealSlot,
+      freeText,
+      discoveryPreference: getPersonalityMetadata(nextPrefs).discoveryPreference ?? discoveryPreference,
+      latitude: live.latitude,
+      longitude: live.longitude,
+      radiusKm,
+    });
+  }
 
-  const weatherLabel =
-    live.tempC !== null
-      ? `${live.tempC}°C · ${live.condition ?? "outside"}`
-      : live.loading
-        ? "checking weather…"
-        : "weather off";
-  const placeLabel =
-    live.city
-      ? `${live.city}${nearestDistance ? ` · ${nearestDistance}` : ""}`
-      : live.loading
-        ? "locating…"
-        : "location off";
+  useEffect(() => {
+    if (!sessionReady || live.loading || (isSignedIn && loadingPrefs) || submitted) return;
+    const request = requestFor();
+    setSubmitted(request);
+    setApplied(currentSnapshot());
+  }, [sessionReady, live.loading, isSignedIn, loadingPrefs, submitted]);
+
+  const isDirty = applied
+    ? JSON.stringify(applied) !== JSON.stringify(currentSnapshot())
+    : false;
+
+  const recommendation = useRecommendations(submitted);
+  const picks = useMemo(
+    () => dedupe(recommendation.data?.recommendations ?? []).slice(0, 8),
+    [recommendation.data]
+  );
+  const avgMatch = useMemo(() => {
+    if (!picks.length) return null;
+    const raw = picks.reduce((sum, item) => sum + (item.score ?? 0), 0) / picks.length;
+    return Math.round(raw <= 1 ? raw * 100 : raw);
+  }, [picks]);
+  const nearestDistance = formatDistance(
+    picks.reduce<number | null>((nearest, item) => {
+      const distance = item.distanceMeters;
+      if (distance == null) return nearest;
+      return nearest == null ? distance : Math.min(nearest, distance);
+    }, null)
+  );
+
+  function persistSession(next: PersonalitySession) {
+    setSession(next);
+    if (isSignedIn) void writePersonalitySession(next, user?.id);
+  }
+
+  function patchSession(patch: Partial<PersonalitySession>) {
+    persistSession({ ...session, ...patch });
+  }
+
+  function updatePicks() {
+    const request = requestFor();
+    setSubmitted(request);
+    setApplied(currentSnapshot());
+  }
+
+  function sendFeedback(item: RecommendationItem, type: InteractionType) {
+    if (!isSignedIn) return;
+    setFeedback((current) => ({ ...current, [item.dish.id]: type }));
+    void recordInteraction({
+      dishId: item.dish.id,
+      restaurantId: item.restaurant.id,
+      branchId: item.branch.id,
+      interactionType: type,
+    }).catch(() => {
+      setFeedback((current) => {
+        const next = { ...current };
+        delete next[item.dish.id];
+        return next;
+      });
+    });
+  }
+
+  async function saveStablePreference(
+    patch: Partial<UserPreferences>,
+    personalityPatch: Record<string, unknown>
+  ) {
+    if (!effectivePrefs) return null;
+    const currentInferred = effectivePrefs.inferredPreferences ?? {};
+    const nextInferred = {
+      ...currentInferred,
+      personality: {
+        ...getPersonalityMetadata(effectivePrefs),
+        ...personalityPatch,
+      },
+    };
+    const next = await updatePrefs.mutateAsync({
+      ...patch,
+      inferredPreferences: nextInferred,
+    });
+    setProfileDraft(next);
+    const request = requestFor(next);
+    setSubmitted(request);
+    setApplied(currentSnapshot(next));
+    return next;
+  }
+
+  async function answerSetup(value: string | number | DietaryProperty[]) {
+    if (savingSetup || !effectivePrefs) return;
+    setSavingSetup(true);
+    setSetupError(null);
+    try {
+      if (setupStep === 0 && typeof value === "string") {
+        await saveStablePreference({ preferredCuisines: [value] }, {});
+      } else if (setupStep === 1 && Array.isArray(value)) {
+        await saveStablePreference(
+          { dietaryRestrictions: value },
+          { dietaryConfirmed: true }
+        );
+      } else if (setupStep === 2 && typeof value === "number") {
+        await saveStablePreference({ spicePreference: value }, { spiceConfirmed: true });
+      } else if (setupStep === 3 && typeof value === "string") {
+        await saveStablePreference({}, { discoveryPreference: value });
+      }
+      setSetupStep((step) => Math.min(3, step + 1));
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : "Could not save that answer.");
+    } finally {
+      setSavingSetup(false);
+    }
+  }
+
+  const spice = effectivePrefs?.spicePreference ?? 0;
+  const cuisines = effectivePrefs?.preferredCuisines ?? [];
+  const refreshing = recommendation.isRefetching;
+  const weatherOption = WEATHER_OPTIONS.find((option) => option.value === weather);
+  const timeLabel = mealSlot
+    ? pickLabel(lang, SLOT_LABELS[mealSlot].word, SLOT_LABELS[mealSlot].labelAr)
+    : t("personality.timeNotShaping");
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (todayKey() === session.dateKey) return;
+      const next = emptyPersonalitySession();
+      setSession(next);
+      setSubmitted(null);
+      setApplied(null);
+      setFreeText("");
+      if (isSignedIn) void writePersonalitySession(next, user?.id);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [isSignedIn, session.dateKey, user?.id]);
 
   return (
     <View className="flex-1 bg-ink-950 overflow-hidden">
       <AmbientGlow top={80} />
       <ScrollView
         className="flex-1 bg-transparent"
-        contentContainerStyle={{
-          // Gap lives on an inner View: gap in a ScrollView
-          // contentContainerStyle is unreliable on Android.
-          paddingTop: insets.top + 8,
-          paddingBottom: 110,
-        }}
+        contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 110 }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={onRefresh}
+            onRefresh={() => void recommendation.refetch()}
             tintColor="#DB9338"
             colors={["#DB9338"]}
           />
         }
       >
         <View className="gap-3.5">
-        {/* Header */}
-        <View className="px-4 flex-row items-start gap-3">
-          <View className="flex-1 gap-1">
-            <View className="flex-row items-center gap-1.5">
-              <View className="w-2 h-2 rounded-full bg-brand-500" />
-              <Text className="text-[10px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-brand-500">
-                Personality • GET /recs?live=true
-              </Text>
-            </View>
-            <Text className="text-[24px] leading-[28px] font-bold text-brand-50">
-              Your taste, decoded.
-            </Text>
-            <Text className="text-[13px] leading-[16px] text-cream-mute">
-              Picks shaped by who you are — and what&apos;s happening right now.
-            </Text>
-          </View>
-          <ProfileButton />
-        </View>
-
-        {/* Archetype card */}
-        <View className="px-4">
-          <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-3">
-            <View className="flex-row items-center gap-2.5">
-              <View className="w-[38px] h-[38px] rounded-[10px] bg-wine-deep items-center justify-center shrink-0">
-                <Text className="text-[18px] leading-[22px]">🌶️</Text>
-              </View>
-              <View className="flex-1 gap-0.5">
-                <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.12em] text-brand-500 uppercase">
-                  {loadingPrefs && isSignedIn
-                    ? "Reading your profile…"
-                    : archetypeName(spice, cuisines.length)}
-                </Text>
-                <Text className="text-[11px] leading-[14px] text-cream-mute">
-                  {isSignedIn && avgMatch !== null
-                    ? `${avgMatch}% match with this week's picks`
-                    : isSignedIn
-                      ? "Mapping your taste to tonight's picks"
-                      : "Sign in to map food + drinks to your personality"}
+          <View className="px-4 flex-row items-start gap-3">
+            <View className="flex-1 gap-1">
+              <View className="flex-row items-center gap-1.5">
+                <View className="w-2 h-2 rounded-full bg-brand-500" />
+                <Text className="text-[10px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+                  {t("personality.live")}
                 </Text>
               </View>
-              <Link href="/profile" asChild>
-                <Pressable hitSlop={8}>
-                  <Text className="text-[11px] leading-[14px] font-semibold text-brand-500">
-                    Edit
-                  </Text>
-                </Pressable>
-              </Link>
-            </View>
-
-            <TraitBar label="Heat" pct={heatPct} />
-            <TraitBar label="Adventure" pct={adventurePct} />
-
-            {isSignedIn ? (
-              <Link href="/profile" asChild>
-                <Pressable hitSlop={4}>
-                  <Text className="text-[11px] leading-[14px] font-semibold text-brand-500">
-                    Retake 2-min taste quiz →
-                  </Text>
-                </Pressable>
-              </Link>
-            ) : (
-              <Link href="/auth" asChild>
-                <Pressable hitSlop={4}>
-                  <Text className="text-[11px] leading-[14px] font-semibold text-brand-500">
-                    Sign in to save your taste profile →
-                  </Text>
-                </Pressable>
-              </Link>
-            )}
-          </View>
-        </View>
-
-        {/* Live factors */}
-        <View className="px-4 gap-2">
-          <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
-            Live factors shaping this page
-          </Text>
-          <View className="flex-row flex-wrap gap-2">
-            <FactorChip
-              emoji={live.emoji ?? "☀️"}
-              label={weatherLabel}
-            />
-            <FactorChip emoji={slot.emoji} label={`${clock.clock} · ${slot.word}`} />
-            <FactorChip emoji="📍" label={placeLabel} />
-            <FactorChip
-              emoji="💸"
-              label={maxPrice ? `≤ ${maxPrice} EGP` : "No budget cap"}
-            />
-            <FactorChip
-              emoji={spice >= 3 ? "🌶️" : "🥗"}
-              label={
-                spice >= 3
-                  ? `Spice ${spice}/5`
-                  : diet.length
-                    ? diet[0].toLowerCase().replace(/_/g, " ")
-                    : "Mild-first"
-              }
-            />
-          </View>
-        </View>
-
-        {/* Tonight's picks — food + drinks, one mixed grid */}
-        <View className="px-4 gap-2.5">
-          <View className="flex-row items-baseline justify-between">
-            <Text className="text-[13px] leading-[16px] font-bold text-brand-50">
-              Tonight&apos;s picks · food + drinks
-            </Text>
-            <Text className="text-[10px] leading-[12px] font-semibold text-brand-500">
-              {picks.length > 0 ? `${picks.length} matched` : ""}
-            </Text>
-          </View>
-          {food.isLoading ? (
-            <View className="flex-row flex-wrap gap-2.5">
-              <DishSkeletonGrid count={4} />
-            </View>
-          ) : food.isError ? (
-            <View className="flex-row items-center gap-1.5 bg-brand-950 border border-[#7F1D1D] rounded-xl px-2.5 py-2">
-              <Text className="text-xs">⚠️</Text>
-              <Text className="text-[10px] font-semibold uppercase text-[#FECACA] flex-1">
-                {(food.error as Error)?.message ??
-                  "The recommendation engine may be rate-limited — pull to retry."}
+              <Text className="text-[24px] leading-[28px] font-bold text-brand-50">
+                {t("personality.title")}
+              </Text>
+              <Text className="text-[13px] leading-[16px] text-cream-mute">
+                {t("personality.subtitle")}
               </Text>
             </View>
-          ) : picks.length === 0 ? (
-            <EmptyState
-              icon="🤔"
-              title="No matches yet"
-              description="Widen your preferences in Profile, then pull to refresh."
-            />
-          ) : (
-            <View className="flex-row flex-wrap gap-2.5">
-              {picks.map((item) => (
-                <View key={item.dish.id} className="basis-[48%] flex-1">
-                  <RecommendationCard item={item} />
+            <ProfileButton />
+          </View>
+
+          <RecommendationResults
+            isLoading={recommendation.isLoading}
+            isError={recommendation.isError}
+            error={recommendation.error as Error | null}
+            refetch={recommendation.refetch}
+            picks={picks}
+            weather={weather}
+            radiusKm={radiusKm}
+            setRadiusKm={setRadiusKm}
+            onIgnoreWeather={() => patchSession({ weatherEnabled: false })}
+            feedback={feedback}
+            onFeedback={isSignedIn ? sendFeedback : undefined}
+          />
+
+          <View className="px-4">
+            <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-3">
+              <View className="flex-row items-center gap-2.5">
+                <View className="w-[38px] h-[38px] rounded-[10px] bg-wine-deep items-center justify-center">
+                  <Text className="text-[18px] leading-[22px]">🌶️</Text>
                 </View>
+                <View className="flex-1 gap-0.5">
+                  <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.12em] text-brand-500 uppercase">
+                    {loadingPrefs && isSignedIn
+                      ? t("personality.readingProfile")
+                      : t(archetypeKey(spice, cuisines.length))}
+                  </Text>
+                  <Text className="text-[11px] leading-[14px] text-cream-mute">
+                    {avgMatch !== null
+                      ? t("personality.matchWithSession", { pct: avgMatch })
+                      : t(PROFILE_STATUS_LABEL[profileStatus])}
+                  </Text>
+                </View>
+                <Link href="/profile" asChild>
+                  <Pressable hitSlop={8}>
+                    <Text className="text-[11px] leading-[14px] font-semibold text-brand-500">{t("common.edit")}</Text>
+                  </Pressable>
+                </Link>
+              </View>
+              <TraitBar label={t("personality.heat")} pct={spice * 20} />
+              <TraitBar label={t("personality.adventure")} pct={cuisines.length * 25 + (discoveryPreference === "CURIOUS" ? 25 : 0)} />
+              {!isSignedIn ? (
+                <Link href="/auth" asChild>
+                  <Pressable hitSlop={4}>
+                    <Text className="text-[11px] leading-[14px] font-semibold text-brand-500">
+                      {t("personality.signInToSave")}
+                    </Text>
+                  </Pressable>
+                </Link>
+              ) : null}
+            </View>
+          </View>
+
+          {isSignedIn && profileStatus !== "READY" ? (
+            <View className="px-4">
+              <View className="bg-wine-deep border border-wine rounded-2xl p-3.5 gap-3">
+                <View className="gap-1">
+                  <Text className="text-[13px] font-bold text-brand-50">
+                    {profileStatus === "NOT_STARTED" ? t("personality.getToKnow") : t("personality.keepShaping")}
+                  </Text>
+                  <Text className="text-[11px] leading-[15px] text-cream-mute">
+                    {t("personality.setupHint", { part: t(SETUP_STEP_LABELS[setupStep]) })}
+                  </Text>
+                </View>
+                {setupStep === 0 ? (
+                  <View className="flex-row flex-wrap gap-1.5">
+                    {CUISINE_OPTIONS.map((cuisine) => (
+                      <ToggleChip key={cuisine} label={cuisine} active={cuisines.includes(cuisine)} onPress={() => void answerSetup(cuisine)} />
+                    ))}
+                  </View>
+                ) : null}
+                {setupStep === 1 ? (
+                  <View className="flex-row flex-wrap gap-1.5">
+                    {DIETARY_OPTIONS.map((option) => (
+                      <ToggleChip key={option.labelKey} label={t(option.labelKey)} active={false} onPress={() => void answerSetup(option.value)} />
+                    ))}
+                  </View>
+                ) : null}
+                {setupStep === 2 ? (
+                  <View className="flex-row flex-wrap gap-1.5">
+                    {SPICE_OPTIONS.map((option) => (
+                      <ToggleChip key={option.value} label={t(option.labelKey)} active={spice === option.value} onPress={() => void answerSetup(option.value)} />
+                    ))}
+                  </View>
+                ) : null}
+                {setupStep === 3 ? (
+                  <View className="gap-1.5">
+                    {DISCOVERY_OPTIONS.map((option) => (
+                      <Pressable key={option.value} onPress={() => void answerSetup(option.value)} className="bg-ink-950 border border-ink-700 rounded-xl px-3 py-2 active:opacity-80">
+                        <Text className="text-xs font-semibold text-cream">{pickLabel(lang, option.label, option.labelAr)}</Text>
+                        <Text className="text-[10px] text-cream-mute">{pickLabel(lang, option.description, option.descriptionAr)}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+                {savingSetup ? <ActivityIndicator color={COLORS.amber} /> : null}
+                {setupError ? <Text className="text-[10px] font-semibold text-[#FECACA]">{setupError}</Text> : null}
+              </View>
+            </View>
+          ) : null}
+
+          <View className="px-4 gap-2">
+            <View className="flex-row items-end justify-between">
+              <View className="gap-1 flex-1">
+                <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
+                  {t("personality.tuneTodaysPicks")}
+                </Text>
+                <Text className="text-[13px] leading-[16px] font-bold text-brand-50">
+                  {t("personality.whatSoundsRight")}
+                </Text>
+              </View>
+              {isDirty ? (
+                <Text className="text-[10px] font-semibold text-brand-500">{t("personality.changesWaiting")}</Text>
+              ) : null}
+            </View>
+            <View className="flex-row flex-wrap gap-1.5">
+              {PERSONALITY_MOODS.map((option) => (
+                <ToggleChip
+                  key={option.id}
+                  label={`${option.emoji} ${pickLabel(lang, option.label, option.labelAr)}`}
+                  active={session.mood === option.id}
+                  onPress={() => patchSession({ mood: session.mood === option.id ? null : option.id })}
+                />
               ))}
             </View>
-          )}
-        </View>
-
-        {/* Why these fit — right now */}
-        <View className="px-4">
-          <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-1.5">
-            <Text className="text-[13px] leading-[16px] font-bold text-brand-50">
-              Why these fit — right now
-            </Text>
-            <Text className="text-[11px] leading-[15px] text-cream-mute">
-              {`${archetypeName(spice, cuisines.length).toLowerCase().replace(/^the /, "")} personality × ${
-                live.tempC !== null ? `${live.tempC}°C ${live.condition}` : slot.word
-              } × ${slot.word} window${
-                maxPrice ? ` → picks under ${maxPrice} EGP` : " → fresh picks for now"
-              }${cuisines.length ? `, leaning ${cuisines.slice(0, 2).join("+")}` : ""}.`}
-            </Text>
-            <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.04em] text-brand-500">
-              Factors are live · pull to refresh
-            </Text>
+            <View className="flex-row items-center gap-2 bg-ink-900 border border-ink-700 rounded-xl px-3 py-1.5">
+              <TextInput
+                value={freeText}
+                onChangeText={setFreeText}
+                placeholder={t("personality.tellAi")}
+                placeholderTextColor={COLORS.mute}
+                className="flex-1 text-[12px] text-cream"
+                returnKeyType="done"
+                onSubmitEditing={updatePicks}
+              />
+              <Pressable onPress={updatePicks} className="bg-brand-500 rounded-full px-3 py-2 active:opacity-80">
+                <Text className="text-[10px] font-bold text-night">{t("common.update")}</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
+
+          <View className="px-4 gap-2">
+            <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
+              {t("personality.liveFactors")}
+            </Text>
+            <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3 gap-3">
+              <View className="gap-1.5">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[11px] font-semibold text-cream">
+                    {weatherOption?.emoji ?? live.emoji ?? "🌤️"} {t("personality.weather")}
+                  </Text>
+                  <Pressable onPress={() => patchSession({ weatherEnabled: !session.weatherEnabled })}>
+                    <Text className="text-[10px] font-semibold text-brand-500">
+                      {session.weatherEnabled ? t("common.on") : t("common.off")}
+                    </Text>
+                  </Pressable>
+                </View>
+                <Text className="text-[10px] text-cream-mute">
+                  {live.tempC !== null && live.condition ? `${live.tempC}°C · ${live.condition}` : live.unavailable ? t("personality.weatherUnavailable") : t("personality.checkingWeather")}
+                </Text>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {WEATHER_OPTIONS.map((option) => (
+                    <ToggleChip key={option.value} label={`${option.emoji} ${pickLabel(lang, option.label, option.labelAr)}`} active={weather === option.value && session.weatherEnabled} onPress={() => patchSession({ weatherOverride: option.value, weatherEnabled: true })} />
+                  ))}
+                </View>
+              </View>
+              <View className="h-px bg-ink-700" />
+              <View className="gap-1.5">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[11px] font-semibold text-cream">🕰️ {t("personality.timeSlot")}</Text>
+                  <Pressable onPress={() => patchSession({ timeEnabled: !session.timeEnabled })}>
+                    <Text className="text-[10px] font-semibold text-brand-500">{session.timeEnabled ? t("common.on") : t("common.off")}</Text>
+                  </Pressable>
+                </View>
+                <Text className="text-[10px] text-cream-mute">
+                  {session.timeEnabled ? `${clock.clock} · ${timeLabel}` : t("personality.timeNotShaping")}
+                </Text>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {(Object.keys(SLOT_LABELS) as PersonalityMealSlot[]).map((slot) => (
+                    <ToggleChip key={slot} label={`${SLOT_LABELS[slot].emoji} ${pickLabel(lang, SLOT_LABELS[slot].word, SLOT_LABELS[slot].labelAr)}`} active={mealSlot === slot && session.timeEnabled} onPress={() => patchSession({ mealSlotOverride: slot, timeEnabled: true })} />
+                  ))}
+                </View>
+              </View>
+              <View className="flex-row flex-wrap gap-1.5">
+                <View className="bg-wine px-2.5 py-1 rounded-full">
+                  <Text className="text-[10px] font-semibold text-cream">📍 {live.city ?? t("personality.locationOff")}{nearestDistance ? ` · ${nearestDistance}` : ""}</Text>
+                </View>
+                <View className="bg-wine px-2.5 py-1 rounded-full">
+                  <Text className="text-[10px] font-semibold text-cream">{discoveryPreference === "CURIOUS" ? t("personality.discoveryOn") : t("personality.familiarFirst")}</Text>
+                </View>
+                {radiusKm > 10 ? (
+                  <View className="bg-wine px-2.5 py-1 rounded-full">
+                    <Text className="text-[10px] font-semibold text-cream">{t("personality.withinKm", { km: radiusKm })}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+            {isDirty ? (
+              <Pressable onPress={updatePicks} className="bg-brand-500 rounded-full py-3 items-center active:opacity-80">
+                <Text className="text-sm font-bold text-night">{t("personality.updatePicks")}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
         </View>
       </ScrollView>
     </View>

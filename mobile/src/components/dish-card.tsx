@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 
 import type { DishSummary } from "@/types/dish";
 import { cn } from "@/lib/cn";
+import { displayName, useLang, useT } from "@/i18n";
 import { formatPrice } from "@/lib/format";
 
 interface Props {
@@ -12,6 +13,11 @@ interface Props {
 }
 
 export function DishCard({ dish, className }: Props) {
+  const t = useT();
+  const lang = useLang();
+  const name = displayName(lang, dish);
+  const isEstimated = dish.verificationStatus === "UNVERIFIED";
+
   return (
     <Link
       href={{ pathname: "/dish/[id]", params: { id: dish.id } }}
@@ -30,7 +36,7 @@ export function DishCard({ dish, className }: Props) {
           className="w-full h-[88px] bg-wine-deep"
           contentFit="cover"
           transition={200}
-          accessibilityLabel={`${dish.name} photo`}
+          accessibilityLabel={`${name} photo`}
         />
 
         <View className="p-2.5 gap-0.5">
@@ -38,11 +44,11 @@ export function DishCard({ dish, className }: Props) {
             numberOfLines={1}
             className="text-[13px] font-bold text-night"
           >
-            {dish.name}
+            {name}
           </Text>
 
           <Text numberOfLines={1} className="text-[10px] text-cream-faint">
-            {dish.restaurantName}
+            {displayName(lang, { name: dish.restaurantName, nameEn: dish.restaurantNameEn })}
             {dish.branchName ? ` · ${dish.branchName}` : ""}
           </Text>
 
@@ -50,6 +56,14 @@ export function DishCard({ dish, className }: Props) {
             <Text className="text-[13px] font-extrabold text-brand-600">
               {formatPrice(dish.price, dish.currency)}
             </Text>
+
+            {isEstimated ? (
+              <View className="px-1.5 py-px rounded-full border border-ink-700">
+                <Text className="text-[8px] font-semibold text-cream-mute">
+                  {t("dish.estimated")}
+                </Text>
+              </View>
+            ) : null}
 
             {typeof dish.rating === "number" ? (
               <Text className="text-[10px] text-stone-600">

@@ -11,6 +11,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
+    "import:setup": "tsx src/importer/run.ts --setup-only",
+    "import:places": "tsx src/importer/run.ts",
+    "enrich:menus": "tsx src/ai/enrichment/run.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

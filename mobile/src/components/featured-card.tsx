@@ -3,6 +3,7 @@ import { Link } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
 import type { DishSummary } from "@/types/dish";
+import { displayName, useLang, useT } from "@/i18n";
 import { formatPrice } from "@/lib/format";
 
 interface Props {
@@ -11,10 +12,15 @@ interface Props {
 }
 
 /**
- * Wide featured card for the home carousel: photo left, info right,
- * rank badge, price + rating row — cream card language from the design.
+ * Wide featured card for the home carousel: photo and info, rank badge,
+ * price + rating row — cream card language from the design.
  */
 export function FeaturedCard({ dish, rank }: Props) {
+  const t = useT();
+  const lang = useLang();
+  const name = displayName(lang, dish);
+  const isEstimated = dish.verificationStatus === "UNVERIFIED";
+
   return (
     <Link
       href={{ pathname: "/dish/[id]", params: { id: dish.id } }}
@@ -31,7 +37,7 @@ export function FeaturedCard({ dish, rank }: Props) {
             className="bg-wine-deep"
             contentFit="cover"
             transition={200}
-            accessibilityLabel={`${dish.name} photo`}
+            accessibilityLabel={`${name} photo`}
           />
           <View className="absolute top-2 left-2 bg-wine rounded-full px-2 py-0.5">
             <Text className="text-[10px] font-bold text-cream">
@@ -45,10 +51,10 @@ export function FeaturedCard({ dish, rank }: Props) {
             numberOfLines={1}
             className="text-[13px] font-bold text-night"
           >
-            {dish.name}
+            {name}
           </Text>
           <Text numberOfLines={1} className="text-[10px] text-cream-faint">
-            {dish.restaurantName}
+            {displayName(lang, { name: dish.restaurantName, nameEn: dish.restaurantNameEn })}
             {dish.branchName ? ` · ${dish.branchName}` : ""}
           </Text>
 
@@ -71,13 +77,22 @@ export function FeaturedCard({ dish, rank }: Props) {
             <Text className="text-[13px] font-extrabold text-brand-600">
               {formatPrice(dish.price, dish.currency)}
             </Text>
-            {dish.tasteAttributes.length > 0 ? (
-              <View className="px-1.5 py-px rounded-full border border-brand-100">
-                <Text className="text-[9px] text-brand-700 font-semibold">
-                  {dish.tasteAttributes[0].toLowerCase()}
-                </Text>
-              </View>
-            ) : null}
+            <View className="flex-row items-center gap-1">
+              {isEstimated ? (
+                <View className="px-1.5 py-px rounded-full border border-ink-700">
+                  <Text className="text-[8px] font-semibold text-cream-mute">
+                    {t("dish.estimated")}
+                  </Text>
+                </View>
+              ) : null}
+              {dish.tasteAttributes.length > 0 ? (
+                <View className="px-1.5 py-px rounded-full border border-brand-100">
+                  <Text className="text-[9px] text-brand-700 font-semibold">
+                    {dish.tasteAttributes[0].toLowerCase()}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
           </View>
         </View>
       </Pressable>

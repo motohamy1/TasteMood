@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthStore } from "@/lib/auth-store";
 import { AmbientGlow } from "@/components/ambient-glow";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n";
 import { COLORS } from "@/lib/theme";
 
 /**
@@ -28,6 +29,7 @@ import { COLORS } from "@/lib/theme";
  */
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
+  const t = useT();
   const signInWithToken = useAuthStore((s) => s.signInWithToken);
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -69,10 +71,10 @@ export default function AuthScreen() {
             Access • JWT
           </Text>
           <Text className="text-2xl font-bold text-brand-50">
-            Welcome back
+            {t("auth.welcomeBack")}
           </Text>
           <Text className="text-sm text-cream-mute">
-            Sign in to sync your preferences, saved dishes, and AI history.
+            {t("auth.signInSubtitle")}
           </Text>
         </View>
 
@@ -108,7 +110,7 @@ export default function AuthScreen() {
                   busy || !token.trim() ? "text-cream-mute" : "text-night"
                 )}
               >
-                Sign in
+                {t("common.signIn")}
               </Text>
             )}
           </Pressable>

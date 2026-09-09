@@ -1,5 +1,6 @@
 import { Text, TextInput, View } from "react-native";
 import { cn } from "@/lib/cn";
+import { useT } from "@/i18n";
 import { COLORS } from "@/lib/theme";
 
 interface Props {
@@ -12,9 +13,11 @@ interface Props {
 export function SearchBar({
   value,
   onChangeText,
-  placeholder = "Search dishes, cuisines…",
+  placeholder,
   className,
 }: Props) {
+  const t = useT();
+
   return (
     <View
       className={cn(
@@ -27,7 +30,7 @@ export function SearchBar({
       <TextInput
         value={value}
         onChangeText={onChangeText}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("dishes.searchPlaceholder")}
         placeholderTextColor={COLORS.mute}
         className="flex-1 text-[13px] text-cream"
         returnKeyType="search"

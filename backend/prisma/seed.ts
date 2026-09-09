@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import { GOVERNORATES, GOVERNORATE_CITIES } from '../src/importer/geography.js';
+import { CUISINES } from '../src/importer/taxonomy.js';
 
 const prisma = new PrismaClient();
 
@@ -16,6 +18,8 @@ async function main() {
   await prisma.branchAtmosphere.deleteMany();
   await prisma.branchOperatingHour.deleteMany();
   await prisma.branch.deleteMany();
+  await prisma.city.deleteMany();
+  await prisma.governorate.deleteMany();
   await prisma.restaurantCuisine.deleteMany();
   await prisma.restaurant.deleteMany();
   await prisma.cuisine.deleteMany();
@@ -27,18 +31,22 @@ async function main() {
   await prisma.userPreferenceProfile.deleteMany();
   await prisma.user.deleteMany();
 
-  // 2. Seed Cuisines
-  const cuisinesData = [
-    { name: 'Egyptian', slug: 'egyptian', description: 'Traditional and modern authentic Egyptian cuisine' },
-    { name: 'Italian', slug: 'italian', description: 'Handcrafted pasta, woodfired pizza, and risottos' },
-    { name: 'American', slug: 'american', description: 'Gourmet smashed burgers, wings, and comfort food' },
-    { name: 'Middle Eastern', slug: 'middle-eastern', description: 'Levantine mezze, shawarma, and grills' },
-    { name: 'Asian', slug: 'asian', description: 'Pan-Asian wok noodles, sushi, and dumplings' },
-    { name: 'Café & Bakery', slug: 'cafe-bakery', description: 'Specialty coffee, artisanal pastries, and light bites' },
-  ];
+  // 2. Seed Governorates & Cities
+  for (const gov of GOVERNORATES) {
+    await prisma.governorate.create({ data: gov });
+  }
+  for (const [govSlug, cities] of Object.entries(GOVERNORATE_CITIES)) {
+    const governorate = await prisma.governorate.findUnique({ where: { slug: govSlug } });
+    if (!governorate) continue;
+    for (const city of cities) {
+      await prisma.city.create({ data: { ...city, governorateId: governorate.id } });
+    }
+  }
+  console.log(`Seeded ${GOVERNORATES.length} governorates with ${Object.values(GOVERNORATE_CITIES).flat().length} cities.`);
 
+  // 3. Seed Cuisines (curated taxonomy shared with the importer)
   const cuisines: Record<string, any> = {};
-  for (const c of cuisinesData) {
+  for (const c of CUISINES) {
     cuisines[c.slug] = await prisma.cuisine.create({ data: c });
   }
 

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useDishes } from "@/lib/queries";
+import { useCuisines, useDishes } from "@/lib/queries";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { DishCard } from "@/components/dish-card";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
@@ -10,19 +10,7 @@ import { CategoryPills } from "@/components/category-pills";
 import { SearchBar } from "@/components/search-bar";
 import { EmptyState } from "@/components/empty-state";
 import { AmbientGlow } from "@/components/ambient-glow";
-
-const CUISINES = [
-  "All",
-  "Italian",
-  "Japanese",
-  "Burgers",
-  "Asian",
-  "Desserts",
-  "Healthy",
-  "Spicy",
-  "Egyptian",
-  "Mexican",
-];
+import { pickLabel, useLang, useT } from "@/i18n";
 
 /**
  * Dishes: the full browse-all screen. Search + cuisine filter over a
@@ -30,10 +18,24 @@ const CUISINES = [
  */
 export default function DishesScreen() {
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const lang = useLang();
   const [search, setSearch] = useState("");
   const [cuisine, setCuisine] = useState("All");
 
   const debouncedSearch = useDebouncedValue(search.trim());
+
+  const { data: cuisines } = useCuisines();
+  const pillOptions = useMemo(
+    () => [
+      { value: "All", label: t("common.all") },
+      ...(cuisines ?? []).map((c) => ({
+        value: c.name,
+        label: pickLabel(lang, c.name, c.nameAr ?? undefined),
+      })),
+    ],
+    [cuisines, lang, t]
+  );
 
   const params = useMemo(
     () => ({
@@ -73,15 +75,15 @@ export default function DishesScreen() {
         <View className="gap-3">
           <View className="flex-row items-center justify-between">
             <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
-              {isLoading ? "Loading…" : `${dishes.length} dishes`}
+              {isLoading ? t("common.loading") : t("dishes.count", { count: dishes.length })}
             </Text>
             <Text className="text-[10px] font-semibold uppercase tracking-[0.08em] text-cream-mute">
-              pull to refresh
+              {t("dishes.pullToRefresh")}
             </Text>
           </View>
           <SearchBar value={search} onChangeText={setSearch} />
           <CategoryPills
-            options={CUISINES}
+            options={pillOptions}
             selected={cuisine}
             onSelect={setCuisine}
           />
@@ -94,16 +96,16 @@ export default function DishesScreen() {
         ) : isError ? (
           <EmptyState
             icon="⚠️"
-            title="Couldn't load dishes"
+            title={t("home.loadError")}
             description={
-              (error as Error)?.message ?? "Please try again later."
+              (error as Error)?.message ?? t("dish.notFoundDesc")
             }
           />
         ) : dishes.length === 0 ? (
           <EmptyState
             icon="🔍"
-            title="No dishes found"
-            description="Try a different search or cuisine."
+            title={t("home.noDishes")}
+            description={t("home.noDishesDesc")}
           />
         ) : (
           <View className="flex-row flex-wrap gap-2.5">

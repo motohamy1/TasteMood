@@ -30,6 +30,15 @@ export class DishController {
     }
   }
 
+  async getCuisines(req: Request, res: Response, next: NextFunction) {
+    try {
+      const cuisines = await dishService.getCuisines();
+      res.json({ success: true, data: cuisines });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async createDish(req: Request, res: Response, next: NextFunction) {
     try {
       const dish = await dishService.createDish(req.body);
