@@ -4,14 +4,11 @@ import { Pressable, Text, View } from "react-native";
 
 import type { DishSummary } from "@/types/dish";
 import { cn } from "@/lib/cn";
+import { formatPrice } from "@/lib/format";
 
 interface Props {
   dish: DishSummary;
   className?: string;
-}
-
-function formatPrice(value: number, currency: string) {
-  return `${value.toFixed(0)} ${currency}`;
 }
 
 export function DishCard({ dish, className }: Props) {

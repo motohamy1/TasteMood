@@ -13,10 +13,16 @@ export class UserRepository {
   async findByAuthUserId(authUserId: string) {
     return prisma.user.findUnique({
       where: { authUserId },
-      include: {
-        preferenceProfile: true,
-      },
     });
+  }
+
+  async create(data: {
+    authUserId: string;
+    email?: string | null;
+    displayName: string;
+    role: 'USER' | 'ADMIN' | 'RESTAURANT_OWNER';
+  }) {
+    return prisma.user.create({ data });
   }
 
   async update(id: string, data: { displayName?: string; avatarUrl?: string }) {

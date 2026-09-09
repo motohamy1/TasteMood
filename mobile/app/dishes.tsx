@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useDishes } from "@/lib/queries";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { DishCard } from "@/components/dish-card";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
 import { CategoryPills } from "@/components/category-pills";
@@ -32,11 +33,7 @@ export default function DishesScreen() {
   const [search, setSearch] = useState("");
   const [cuisine, setCuisine] = useState("All");
 
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
-    return () => clearTimeout(t);
-  }, [search]);
+  const debouncedSearch = useDebouncedValue(search.trim());
 
   const params = useMemo(
     () => ({

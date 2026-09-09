@@ -9,21 +9,20 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import {
-  useDish,
-  useMyInteractions,
-  useRecordInteraction,
-  useUnsaveDish,
-} from "@/lib/queries";
+import { useDish } from "@/lib/queries";
 import { useAuthStore, selectIsSignedIn } from "@/lib/auth-store";
-import { useEffect, useMemo, useState } from "react";
+import {
+  isDishSaved,
+  useRecordViewDish,
+  useSaveDish,
+  useSavedDishIds,
+  useUnsaveDish,
+} from "@/lib/saved-dishes";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { COLORS } from "@/lib/theme";
 import { AmbientGlow } from "@/components/ambient-glow";
-
-function formatPrice(value: number, currency: string) {
-  return `${value.toFixed(0)} ${currency}`;
-}
+import { formatPrice } from "@/lib/format";
 
 const SPICE_LEVELS = ["Mild", "Medium", "Hot"] as const;
 
@@ -45,34 +44,25 @@ export default function DishDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { data: dish, isLoading, isError, error, refetch } = useDish(id);
-  const recordInteraction = useRecordInteraction();
-  const unsaveDish = useUnsaveDish();
   const isSignedIn = useAuthStore(selectIsSignedIn);
+
+  // Savedness comes from the single saved-dishes module — no more scanning a
+  // ≤100-item interaction list or keeping a second optimistic copy here.
+  const { data: savedIds } = useSavedDishIds();
+  const isSaved = isDishSaved(savedIds, dish?.id);
+  const saveDish = useSaveDish();
+  const unsaveDish = useUnsaveDish();
+  const recordViewDish = useRecordViewDish();
 
   const [portion, setPortion] = useState(1);
   const [spice, setSpice] = useState<(typeof SPICE_LEVELS)[number]>("Medium");
   const [toppings, setToppings] = useState<string[]>([]);
 
-  // Fetch the user's saved interactions to know if THIS dish is saved.
-  const { data: savedInteractions } = useMyInteractions({
-    interactionType: "SAVED",
-    limit: 100,
-  });
-  const isSaved = useMemo(
-    () =>
-      !!dish?.id &&
-      (savedInteractions ?? []).some((i) => i.dishId === dish.id),
-    [savedInteractions, dish?.id]
-  );
-
   // Fire a VIEW_DISH interaction once the dish loads (signed-in users only —
   // the endpoint requires auth and a 401 here is pure noise for guests).
   useEffect(() => {
     if (dish?.id && isSignedIn) {
-      recordInteraction.mutate({
-        dishId: dish.id,
-        interactionType: "VIEW_DISH",
-      });
+      recordViewDish.mutate(dish.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dish?.id, isSignedIn]);
@@ -83,10 +73,7 @@ export default function DishDetailsScreen() {
     if (isSaved) {
       unsaveDish.mutate(dish.id);
     } else {
-      recordInteraction.mutate({
-        dishId: dish.id,
-        interactionType: "SAVED",
-      });
+      saveDish.mutate(dish.id);
     }
   }
 

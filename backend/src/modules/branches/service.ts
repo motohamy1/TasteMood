@@ -1,64 +1,33 @@
 import { branchRepository } from './repository.js';
 import { CreateBranchInput, QueryBranchInput, UpdateBranchInput } from './schema.js';
 import { AppError } from '../../common/errors/app-error.js';
-import { calculateHaversineDistanceKm } from '../../common/utils/geo.utils.js';
 import { BranchOperatingHour } from '@prisma/client';
+import { evaluateBranch, isBranchOpenAt } from './availability.js';
 
 export class BranchService {
   /**
    * Evaluates if branch is currently open based on day-of-week and 24h open/close times.
+   * Delegates to the shared geo-availability module.
    */
   isBranchOpen(hours: BranchOperatingHour[], now: Date = new Date()): boolean {
-    if (!hours || hours.length === 0) return true; // Default open if no explicit hours defined
-
-    const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentFormatted = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
-
-    const todaysHours = hours.filter((h) => h.dayOfWeek === currentDay);
-    if (todaysHours.length === 0) return false;
-
-    for (const shift of todaysHours) {
-      if (shift.isClosed) return false;
-
-      // Handle normal daytime shift (e.g. 09:00 - 23:00)
-      if (shift.openTime <= shift.closeTime) {
-        if (currentFormatted >= shift.openTime && currentFormatted <= shift.closeTime) {
-          return true;
-        }
-      } else {
-        // Handle overnight shift (e.g. 18:00 - 03:00)
-        if (currentFormatted >= shift.openTime || currentFormatted <= shift.closeTime) {
-          return true;
-        }
-      }
-    }
-
-    return false;
+    return isBranchOpenAt(hours, now);
   }
 
   async getBranches(params: QueryBranchInput) {
     const branches = await branchRepository.findMany(params);
     const now = new Date();
+    const origin =
+      params.latitude !== undefined && params.longitude !== undefined
+        ? { latitude: params.latitude, longitude: params.longitude }
+        : undefined;
 
     let result = branches.map((branch) => {
-      const isOpen = this.isBranchOpen(branch.operatingHours, now);
-      let distanceKm: number | undefined;
-
-      if (params.latitude !== undefined && params.longitude !== undefined) {
-        distanceKm = calculateHaversineDistanceKm(
-          params.latitude,
-          params.longitude,
-          branch.latitude,
-          branch.longitude
-        );
-      }
+      const { isOpen, distanceKm } = evaluateBranch(branch, origin, now);
 
       return {
         ...branch,
         isOpen,
-        distanceKm: distanceKm !== undefined ? Number(distanceKm.toFixed(2)) : undefined,
+        distanceKm,
       };
     });
 
@@ -82,17 +51,16 @@ export class BranchService {
       throw AppError.notFound(`Branch with ID ${id} not found`);
     }
 
-    const isOpen = this.isBranchOpen(branch.operatingHours);
-    let distanceKm: number | undefined;
-
-    if (userLat !== undefined && userLng !== undefined) {
-      distanceKm = calculateHaversineDistanceKm(userLat, userLng, branch.latitude, branch.longitude);
-    }
+    const origin =
+      userLat !== undefined && userLng !== undefined
+        ? { latitude: userLat, longitude: userLng }
+        : undefined;
+    const { isOpen, distanceKm } = evaluateBranch(branch, origin);
 
     return {
       ...branch,
       isOpen,
-      distanceKm: distanceKm !== undefined ? Number(distanceKm.toFixed(2)) : undefined,
+      distanceKm,
     };
   }
 

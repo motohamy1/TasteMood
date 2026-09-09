@@ -3,6 +3,7 @@ import { Link } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
 import type { DishSummary } from "@/types/dish";
+import { formatPrice } from "@/lib/format";
 
 interface Props {
   dish: DishSummary;
@@ -68,7 +69,7 @@ export function FeaturedCard({ dish, rank }: Props) {
 
           <View className="flex-row items-center justify-between mt-0.5">
             <Text className="text-[13px] font-extrabold text-brand-600">
-              {dish.price.toFixed(0)} {dish.currency}
+              {formatPrice(dish.price, dish.currency)}
             </Text>
             {dish.tasteAttributes.length > 0 ? (
               <View className="px-1.5 py-px rounded-full border border-brand-100">

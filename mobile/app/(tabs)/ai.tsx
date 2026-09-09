@@ -17,24 +17,12 @@ import { EmptyState } from "@/components/empty-state";
 import { AmbientGlow } from "@/components/ambient-glow";
 import { cn } from "@/lib/cn";
 import { COLORS } from "@/lib/theme";
+import {
+  MOODS,
+  QUICK_PROMPTS,
+  buildRecommendationRequest,
+} from "@/lib/recommendations";
 import type { RecommendationRequest } from "@/types/recommendation";
-
-const QUICK_PROMPTS: Array<{ label: string; payload: Partial<RecommendationRequest> }> = [
-  { label: "Spicy & under 200 EGP", payload: { maxPrice: 200, tasteAttributes: ["SPICY"] } },
-  { label: "Healthy & light", payload: { mealTypes: ["LIGHT"] } },
-  { label: "Sweet treat", payload: { tasteAttributes: ["SWEET"], mealTypes: ["DESSERT"] } },
-  { label: "Vegan", payload: { dietaryRestrictions: ["VEGAN"] } },
-  { label: "Surprise me", payload: { surpriseMe: true } },
-];
-
-const MOODS: Array<{ emoji: string; label: string; query: string }> = [
-  { emoji: "🔥", label: "Spicy", query: "something spicy with bold flavors" },
-  { emoji: "🥗", label: "Light", query: "something light and healthy" },
-  { emoji: "🍔", label: "Comfort", query: "comfort food, rich and filling" },
-  { emoji: "🍰", label: "Sweet", query: "a sweet dessert" },
-  { emoji: "🌱", label: "Vegan", query: "vegan dish" },
-  { emoji: "🌙", label: "Late night", query: "quick late night snack" },
-];
 
 function CapsLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -48,40 +36,35 @@ function CapsLabel({ children }: { children: React.ReactNode }) {
  * Explore (AI Chef): describe a craving or pick a mood — powered by the AI
  * recommendations engine. Requests fire only on explicit action (submit /
  * tile / prompt tap), never on keystroke — POSTing /recommendations per
- * character would burn the AI rate limit and provider budget (CR-04).
+ * character would burn the AI rate limit and provider budget (CR-04). Payload
+ * building lives in lib/recommendations.
  */
 export default function ExploreScreen() {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [activePrompt, setActivePrompt] = useState<number | null>(null);
   const [activeMood, setActiveMood] = useState<number | null>(null);
-  const [maxPrice, setMaxPrice] = useState<string>("");
+  const [maxPriceInput, setMaxPriceInput] = useState("");
   const [submitted, setSubmitted] = useState<RecommendationRequest | null>(
     null
   );
 
-  function buildPayload(
-    promptIdx: number | null,
-    moodIdx: number | null
-  ): RecommendationRequest | null {
-    const trimmedQuery = query.trim();
-    if (!trimmedQuery && promptIdx === null && moodIdx === null) return null;
-    const parsedPrice = maxPrice.trim() ? Number(maxPrice) : NaN;
-    const base: RecommendationRequest = {
-      query:
-        trimmedQuery ||
-        (moodIdx !== null ? MOODS[moodIdx].query : undefined),
-      maxPrice:
-        Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : undefined,
-      limit: 6,
-    };
-    return promptIdx !== null
-      ? { ...base, ...QUICK_PROMPTS[promptIdx].payload }
-      : base;
+  function requestFor(promptIdx: number | null, moodIdx: number | null) {
+    return buildRecommendationRequest({
+      query,
+      activePrompt: promptIdx,
+      activeMood: moodIdx,
+      maxPriceInput,
+    });
   }
 
   function handleSubmit() {
-    const request = buildPayload(activePrompt, activeMood);
+    const request = buildRecommendationRequest({
+      query,
+      activePrompt,
+      activeMood,
+      maxPriceInput,
+    });
     if (request) setSubmitted(request);
   }
 
@@ -89,7 +72,7 @@ export default function ExploreScreen() {
     const next = activePrompt === idx ? null : idx;
     setActivePrompt(next);
     if (next !== null) setActiveMood(null);
-    const request = buildPayload(next, next !== null ? null : activeMood);
+    const request = requestFor(next, next !== null ? null : activeMood);
     if (request) setSubmitted(request);
     else if (next === null && activeMood === null) setSubmitted(null);
   }
@@ -98,7 +81,7 @@ export default function ExploreScreen() {
     const next = activeMood === idx ? null : idx;
     setActiveMood(next);
     if (next !== null) setActivePrompt(null);
-    const request = buildPayload(null, next);
+    const request = requestFor(null, next);
     if (request) setSubmitted(request);
     else setSubmitted(null);
   }
@@ -169,8 +152,8 @@ export default function ExploreScreen() {
               onSubmitEditing={handleSubmit}
             />
             <TextInput
-              value={maxPrice}
-              onChangeText={setMaxPrice}
+              value={maxPriceInput}
+              onChangeText={setMaxPriceInput}
               placeholder="250 EGP"
               placeholderTextColor={COLORS.mute}
               keyboardType="numeric"

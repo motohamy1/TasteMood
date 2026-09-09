@@ -14,11 +14,3 @@ export interface ApiResponse<T = unknown> {
     details?: unknown;
   };
 }
-
-export interface AuthenticatedUser {
-  id: string;
-  authUserId: string;
-  email?: string | null;
-  displayName: string;
-  role: 'USER' | 'ADMIN' | 'RESTAURANT_OWNER';
-}

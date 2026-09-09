@@ -1,8 +1,15 @@
 import { prisma } from '../../database/prisma.client.js';
 import { SearchDishesInput, SearchRestaurantsInput } from './schema.js';
-import { calculateHaversineDistanceKm } from '../../common/utils/geo.utils.js';
-import { branchService } from '../branches/service.js';
+import { closestBranchSummary } from '../branches/availability.js';
+import { dishRepository } from '../dishes/repository.js';
+import { presentDish } from '../dishes/presenter.js';
 import { Prisma } from '@prisma/client';
+import { QueryDishInput } from '../dishes/schema.js';
+import { Coordinates } from '../../common/utils/geo.utils.js';
+
+function toOrigin(lat?: number, lng?: number): Coordinates | undefined {
+  return lat !== undefined && lng !== undefined ? { latitude: lat, longitude: lng } : undefined;
+}
 
 export class SearchService {
   async searchRestaurants(params: SearchRestaurantsInput) {
@@ -68,47 +75,30 @@ export class SearchService {
       },
     });
 
-    const now = new Date();
-    let enriched = restaurants.map((r) => {
-      // Find closest branch & open status
-      let closestBranchDistance: number | undefined;
-      let hasOpenBranch = false;
-
-      r.branches.forEach((b) => {
-        const isOpen = branchService.isBranchOpen(b.operatingHours, now);
-        if (isOpen) hasOpenBranch = true;
-
-        if (lat !== undefined && lng !== undefined) {
-          const dist = calculateHaversineDistanceKm(lat, lng, b.latitude, b.longitude);
-          if (closestBranchDistance === undefined || dist < closestBranchDistance) {
-            closestBranchDistance = dist;
-          }
-        }
-      });
-
+    const origin = toOrigin(lat, lng);
+    const enriched = restaurants.map((r) => {
+      const { hasOpenBranch, closestDistanceKm } = closestBranchSummary(r.branches, origin);
       return {
         ...r,
         hasOpenBranch,
-        closestDistanceKm:
-          closestBranchDistance !== undefined
-            ? Number(closestBranchDistance.toFixed(2))
-            : undefined,
+        closestDistanceKm,
       };
     });
 
-    if (lat !== undefined && lng !== undefined) {
-      enriched = enriched.filter(
-        (r) => r.closestDistanceKm !== undefined && r.closestDistanceKm <= radiusKm
-      );
-      enriched.sort((a, b) => (a.closestDistanceKm || 0) - (b.closestDistanceKm || 0));
+    const withinRadius = enriched.filter((r) => {
+      if (origin) {
+        return r.closestDistanceKm !== undefined && r.closestDistanceKm <= radiusKm;
+      }
+      return true;
+    });
+    if (origin) {
+      withinRadius.sort((a, b) => (a.closestDistanceKm || 0) - (b.closestDistanceKm || 0));
     }
 
-    if (openNow) {
-      enriched = enriched.filter((r) => r.hasOpenBranch);
-    }
+    const openFiltered = openNow ? withinRadius.filter((r) => r.hasOpenBranch) : withinRadius;
 
-    const total = enriched.length;
-    const paginated = enriched.slice((page - 1) * limit, page * limit);
+    const total = openFiltered.length;
+    const paginated = openFiltered.slice((page - 1) * limit, page * limit);
 
     return {
       items: paginated,
@@ -137,148 +127,58 @@ export class SearchService {
       limit,
     } = params;
 
-    const where: Prisma.DishWhereInput = {
-      status: 'ACTIVE',
-      ...(minPrice !== undefined || maxPrice !== undefined
-        ? {
-            price: {
-              ...(minPrice !== undefined ? { gte: minPrice } : {}),
-              ...(maxPrice !== undefined ? { lte: maxPrice } : {}),
-            },
-          }
-        : {}),
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: 'insensitive' } },
-              { description: { contains: q, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-      ...(cuisine
-        ? {
-            menu: {
-              restaurant: {
-                cuisines: {
-                  some: {
-                    cuisine: {
-                      OR: [
-                        { name: { contains: cuisine, mode: 'insensitive' } },
-                        { slug: { contains: cuisine, mode: 'insensitive' } },
-                      ],
-                    },
-                  },
-                },
-              },
-            },
-          }
-        : {}),
-      ...(tag
-        ? {
-            tags: {
-              some: {
-                tag: {
-                  OR: [
-                    { name: { contains: tag, mode: 'insensitive' } },
-                    { slug: { contains: tag, mode: 'insensitive' } },
-                  ],
-                },
-              },
-            },
-          }
-        : {}),
-      ...(taste
-        ? {
-            attributes: {
-              tasteAttributes: { has: taste },
-            },
-          }
-        : {}),
-      ...(mealType
-        ? {
-            attributes: {
-              mealCharacteristics: { has: mealType },
-            },
-          }
-        : {}),
-      ...(dietary
-        ? {
-            attributes: {
-              dietaryProperties: { has: dietary },
-            },
-          }
-        : {}),
+    // Same filter semantics as GET /dishes — the where-builder lives in the
+    // dish repository; the relation graph is the shared search include.
+    const repoParams: QueryDishInput = {
+      page: 1,
+      limit: 100,
+      search: q,
+      cuisine,
+      minPrice,
+      maxPrice,
+      tasteAttribute: taste,
+      mealCharacteristic: mealType,
+      dietaryProperty: dietary,
+      tag,
     };
 
-    const dishes = await prisma.dish.findMany({
-      where,
-      include: {
-        attributes: true,
-        tags: { include: { tag: true } },
-        categories: { include: { category: true } },
-        ingredients: { include: { ingredient: true } },
-        menu: {
-          include: {
-            restaurant: {
-              include: {
-                cuisines: { include: { cuisine: true } },
-                branches: {
-                  where: { status: 'ACTIVE' },
-                  include: {
-                    operatingHours: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+    const dishes = await dishRepository.searchMatching(repoParams);
+    const origin = toOrigin(lat, lng);
 
-    const now = new Date();
-    let enriched = dishes.map((dish) => {
-      const branches = dish.menu.restaurant.branches;
-      let closestBranchDistance: number | undefined;
-      let hasOpenBranch = false;
-
-      branches.forEach((b) => {
-        if (branchService.isBranchOpen(b.operatingHours, now)) {
-          hasOpenBranch = true;
-        }
-        if (lat !== undefined && lng !== undefined) {
-          const dist = calculateHaversineDistanceKm(lat, lng, b.latitude, b.longitude);
-          if (closestBranchDistance === undefined || dist < closestBranchDistance) {
-            closestBranchDistance = dist;
-          }
-        }
-      });
-
-      return {
-        ...dish,
-        hasOpenBranch,
-        closestDistanceKm:
-          closestBranchDistance !== undefined
-            ? Number(closestBranchDistance.toFixed(2))
-            : undefined,
-      };
-    });
-
-    if (lat !== undefined && lng !== undefined) {
-      enriched = enriched.filter(
-        (d) => d.closestDistanceKm !== undefined && d.closestDistanceKm <= radiusKm
+    // Enrich rows with open-now + closest-branch distance, then filter/sort in
+    // memory: radius and open-now are branch-level facts the DB query can't see.
+    const enriched = dishes.map((dish) => {
+      const { hasOpenBranch, closestDistanceKm } = closestBranchSummary(
+        dish.menu?.restaurant?.branches,
+        origin
       );
-      enriched.sort((a, b) => (a.closestDistanceKm || 0) - (b.closestDistanceKm || 0));
+      return { dish, hasOpenBranch, closestDistanceKm };
+    });
+
+    let filtered = enriched;
+    if (origin) {
+      filtered = filtered.filter(
+        (entry) => entry.closestDistanceKm !== undefined && entry.closestDistanceKm <= radiusKm
+      );
+      filtered.sort((a, b) => (a.closestDistanceKm || 0) - (b.closestDistanceKm || 0));
     }
 
     if (openNow) {
-      enriched = enriched.filter((d) => d.hasOpenBranch);
+      filtered = filtered.filter((entry) => entry.hasOpenBranch);
     }
 
-    const total = enriched.length;
-    const paginated = enriched.slice((page - 1) * limit, page * limit);
+    const total = filtered.length;
+    const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+    // Every dish leaves through the same presenter as GET /dishes — one wire shape.
+    const items = paginated.map(({ dish, hasOpenBranch, closestDistanceKm }) => ({
+      ...presentDish(dish),
+      hasOpenBranch,
+      closestDistanceKm,
+    }));
 
     return {
-      items: paginated,
+      items,
       total,
       page,
       limit,

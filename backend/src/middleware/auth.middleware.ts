@@ -2,16 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { AppError } from '../common/errors/app-error.js';
-import { prisma } from '../database/prisma.client.js';
-import { AuthenticatedUser } from '../common/types/api-response.js';
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthenticatedUser;
-    }
-  }
-}
+import { Caller } from '../common/types/identity.js';
+import { userRepository } from '../modules/users/repository.js';
 
 interface SupabaseJwtPayload {
   sub: string; // Supabase auth user id
@@ -27,6 +19,26 @@ interface SupabaseJwtPayload {
   };
 }
 
+function roleFromAuthUserId(authUserId: string): Caller['role'] {
+  return authUserId.includes('admin') ? 'ADMIN' : 'USER';
+}
+
+function callerFromAuthUserId(authUserId: string, email?: string | null, displayName?: string): Caller {
+  return {
+    id: authUserId,
+    authUserId,
+    email,
+    displayName: displayName || 'TasteMood User',
+    role: roleFromAuthUserId(authUserId),
+  };
+}
+
+/**
+ * Thin adapter over the identity seam: verify the token, then resolve (or
+ * create) the user row behind the users module. No domain side effects live
+ * here — in particular the "taste profile always exists" invariant is owned by
+ * the preferences module, not by authentication.
+ */
 export async function authMiddleware(
   req: Request,
   _res: Response,
@@ -62,41 +74,22 @@ export async function authMiddleware(
       }
     }
 
-    // If running in test mode or with mock token, construct user object directly
+    // Mock tokens never touch the database — construct the caller directly.
     if (token.startsWith('mock-')) {
-      req.user = {
-        id: authUserId,
-        authUserId,
-        email,
-        displayName,
-        role: authUserId.includes('admin') ? 'ADMIN' : 'USER',
-      };
+      req.user = callerFromAuthUserId(authUserId, email, displayName);
       return next();
     }
 
     try {
       // Lookup user in database or create on-the-fly for seamless Supabase Auth sync
-      let user = await prisma.user.findUnique({
-        where: { authUserId },
-      });
+      let user = await userRepository.findByAuthUserId(authUserId);
 
       if (!user) {
-        user = await prisma.user.create({
-          data: {
-            authUserId,
-            email,
-            displayName,
-            role: authUserId.includes('admin') ? 'ADMIN' : 'USER',
-            preferenceProfile: {
-              create: {
-                preferredCuisines: [],
-                dislikedCuisines: [],
-                dietaryRestrictions: [],
-                preferredMealTypes: [],
-                atmospherePreferences: [],
-              },
-            },
-          },
+        user = await userRepository.create({
+          authUserId,
+          email,
+          displayName,
+          role: roleFromAuthUserId(authUserId),
         });
       }
 
@@ -109,13 +102,7 @@ export async function authMiddleware(
       };
     } catch (dbError) {
       if (env.NODE_ENV === 'test') {
-        req.user = {
-          id: authUserId,
-          authUserId,
-          email,
-          displayName,
-          role: authUserId.includes('admin') ? 'ADMIN' : 'USER',
-        };
+        req.user = callerFromAuthUserId(authUserId, email, displayName);
       } else {
         throw dbError;
       }

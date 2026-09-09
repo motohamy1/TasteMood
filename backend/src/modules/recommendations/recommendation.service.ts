@@ -1,21 +1,32 @@
-import { prisma } from '../../database/prisma.client.js';
-import { RecommendationRequestInput } from './schema.js';
+import { RecommendationRequestInput, RecommendationResponseSchema } from './schema.js';
 import { intentService } from '../../ai/intent/intent.service.js';
 import { explanationService } from '../../ai/explanation/explanation.service.js';
-import { rankingService, ScoredCandidate } from './ranking.service.js';
-import { calculateHaversineDistanceKm } from '../../common/utils/geo.utils.js';
-import { branchService } from '../branches/service.js';
+import { CandidateInput, rankingService, ScoredCandidate } from './ranking.service.js';
+import { dishRepository } from '../dishes/repository.js';
+import { presentDish } from '../dishes/presenter.js';
+import { evaluateBranch } from '../branches/availability.js';
 import { preferencesRepository } from '../preferences/repository.js';
 import { RecommendationFact, UserContext } from '../../ai/providers/ai-provider.interface.js';
 import { StructuredIntent } from '../../ai/intent/intent.schema.js';
+import { Prisma } from '@prisma/client';
+
+type DishRow = Awaited<ReturnType<typeof dishRepository.findRankingPool>>[number];
+type RestaurantRow = NonNullable<DishRow['menu']>['restaurant'];
+type BranchRow = RestaurantRow['branches'][number];
+type RankedDishRow = ScoredCandidate<DishRow>;
 
 export class RecommendationService {
+  /**
+   * The recommendation pipeline. One interface — (request, caller) in,
+   * schema-validated result out — with the profile lookup, intent extraction,
+   * candidate fetch, geo fan-out, ranking, explanation and response assembly
+   * kept as internal steps rather than six public modules.
+   */
   async getRecommendations(input: RecommendationRequestInput, userId?: string) {
-    // 1. Fetch User Profile Context if authenticated
-    let userProfile = null;
-    if (userId) {
-      userProfile = await preferencesRepository.findByUserId(userId);
-    }
+    // 1. Fetch caller's taste profile if authenticated
+    const userProfile = userId
+      ? await preferencesRepository.findByUserId(userId)
+      : null;
 
     const userContext: UserContext = {
       userId,
@@ -27,33 +38,94 @@ export class RecommendationService {
       longitude: input.lng,
     };
 
-    // 2. Extract or Synthesize Structured Intent
-    let intent: StructuredIntent;
+    // 2. Extract (or synthesize) the structured intent
+    const intent = await this.#extractIntent(input, userContext, userProfile);
+    this.#applyExplicitOverrides(input, intent);
+
+    // 3. Fetch candidate pool against deterministic hard constraints
+    const dishes = await dishRepository.findRankingPool(this.#buildHardConstraints(intent));
+    const now = new Date();
+
+    // 4. Fan out to branches, applying geo + exclusion filters in memory
+    const candidates = this.#buildCandidatePool(dishes, intent, now);
+
+    // 5. Score, rank, and keep the top K
+    const topCandidates = candidates
+      .map((candidate) => rankingService.scoreCandidate(candidate, intent, userProfile))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, input.limit);
+
+    // 6. Explain the winners (single degrade policy lives at the AI seam)
+    const facts = this.#buildFacts(topCandidates);
+    const explanations = await explanationService.generateExplanations(
+      input.query || 'Recommended for you',
+      facts
+    );
+
+    // 7. Assemble + validate the response contract
+    const response = {
+      request: {
+        originalQuery: input.query || null,
+        surpriseMe: intent.surpriseMe,
+      },
+      interpretation: {
+        maxPrice: intent.maxPrice ?? null,
+        minPrice: intent.minPrice ?? null,
+        mealTypes: intent.mealTypes,
+        tasteAttributes: intent.tasteAttributes,
+        preferredCuisines: intent.preferredCuisines,
+        dietaryRestrictions: intent.dietaryRestrictions,
+        atmosphere: intent.atmosphere,
+      },
+      recommendations: this.#formatRecommendations(topCandidates, explanations, now),
+    };
+
+    return RecommendationResponseSchema.parse(response);
+  }
+
+  async #extractIntent(
+    input: RecommendationRequestInput,
+    userContext: UserContext,
+    userProfile: Awaited<ReturnType<typeof preferencesRepository.findByUserId>>
+  ): Promise<StructuredIntent> {
     if (input.query && input.query.trim().length > 0) {
-      intent = await intentService.extractIntent(input.query, userContext);
-    } else {
-      intent = {
-        rawQuery: 'Structured Recommendation Request',
-        mealTypes: input.mealTypes || [],
-        preferredCuisines: input.cuisines || [],
-        dislikedCuisines: userProfile?.dislikedCuisines || [],
-        preferredTags: input.tags || [],
-        tasteAttributes: input.tasteAttributes || [],
-        dietaryRestrictions: input.dietaryRestrictions || (userProfile?.dietaryRestrictions as any) || [],
-        atmosphere: input.atmosphere || [],
-        maxPrice: input.maxPrice,
-        minPrice: input.minPrice,
-        location:
-          input.lat !== undefined && input.lng !== undefined
-            ? { latitude: input.lat, longitude: input.lng, radiusKm: input.radiusKm }
-            : null,
-        surpriseMe: input.surpriseMe,
-        excludedIngredients: [],
-      };
+      return intentService.extractIntent(input.query, userContext);
     }
 
-    // Override extracted intent with explicitly passed parameters
-    if (input.maxPrice) intent.maxPrice = input.maxPrice;
+    return {
+      rawQuery: 'Structured Recommendation Request',
+      mealTypes: input.mealTypes || [],
+      preferredCuisines: input.cuisines || [],
+      dislikedCuisines: userProfile?.dislikedCuisines || [],
+      preferredTags: input.tags || [],
+      tasteAttributes: input.tasteAttributes || [],
+      dietaryRestrictions: input.dietaryRestrictions || (userProfile?.dietaryRestrictions as any) || [],
+      atmosphere: input.atmosphere || [],
+      maxPrice: input.maxPrice,
+      minPrice: input.minPrice,
+      location:
+        input.lat !== undefined && input.lng !== undefined
+          ? { latitude: input.lat, longitude: input.lng, radiusKm: input.radiusKm }
+          : null,
+      surpriseMe: input.surpriseMe,
+      excludedIngredients: [],
+    };
+  }
+
+  /**
+   * Explicitly passed structured parameters always win over what the AI intent
+   * extractor guessed. Previously only maxPrice/location/surpriseMe were
+   * re-applied, so e.g. `query` + `minPrice` silently dropped the price floor.
+   */
+  #applyExplicitOverrides(input: RecommendationRequestInput, intent: StructuredIntent): void {
+    if (input.maxPrice !== undefined) intent.maxPrice = input.maxPrice;
+    if (input.minPrice !== undefined) intent.minPrice = input.minPrice;
+    if (input.cuisines !== undefined) intent.preferredCuisines = input.cuisines;
+    if (input.mealTypes !== undefined) intent.mealTypes = input.mealTypes;
+    if (input.tasteAttributes !== undefined) intent.tasteAttributes = input.tasteAttributes;
+    if (input.dietaryRestrictions !== undefined) intent.dietaryRestrictions = input.dietaryRestrictions;
+    if (input.atmosphere !== undefined) intent.atmosphere = input.atmosphere;
+    if (input.tags !== undefined) intent.preferredTags = input.tags;
     if (input.lat !== undefined && input.lng !== undefined) {
       intent.location = {
         latitude: input.lat,
@@ -62,67 +134,47 @@ export class RecommendationService {
       };
     }
     if (input.surpriseMe) intent.surpriseMe = true;
+  }
 
-    // 3. Database Candidate Retrieval (Deterministic Hard Constraints)
-    const dishes = await prisma.dish.findMany({
-      where: {
-        status: 'ACTIVE',
-        ...(intent.maxPrice ? { price: { lte: intent.maxPrice } } : {}),
-        ...(intent.minPrice ? { price: { gte: intent.minPrice } } : {}),
-        // Hard dietary restriction enforcement
-        ...(intent.dietaryRestrictions.length > 0
-          ? {
-              attributes: {
-                dietaryProperties: {
-                  hasEvery: intent.dietaryRestrictions as any,
-                },
-              },
-            }
-          : {}),
-      },
-      include: {
-        attributes: true,
-        categories: { include: { category: true } },
-        tags: { include: { tag: true } },
-        ingredients: { include: { ingredient: true } },
-        _count: {
-          select: { interactions: true },
-        },
-        menu: {
-          include: {
-            restaurant: {
-              include: {
-                cuisines: { include: { cuisine: true } },
-                branches: {
-                  where: { status: 'ACTIVE' },
-                  include: {
-                    operatingHours: true,
-                    atmospheres: { include: { atmosphereTag: true } },
-                  },
-                },
+  #buildHardConstraints(intent: StructuredIntent): Prisma.DishWhereInput {
+    const priceFilter: Prisma.FloatFilter = {};
+    if (intent.maxPrice !== undefined && intent.maxPrice !== null && intent.maxPrice > 0) {
+      priceFilter.lte = intent.maxPrice;
+    }
+    if (intent.minPrice !== undefined && intent.minPrice !== null && intent.minPrice > 0) {
+      priceFilter.gte = intent.minPrice;
+    }
+
+    return {
+      status: 'ACTIVE',
+      ...(Object.keys(priceFilter).length > 0 ? { price: priceFilter } : {}),
+      // Hard dietary restriction enforcement
+      ...(intent.dietaryRestrictions.length > 0
+        ? {
+            attributes: {
+              dietaryProperties: {
+                hasEvery: intent.dietaryRestrictions as any,
               },
             },
-          },
-        },
-      },
-    });
+          }
+        : {}),
+    };
+  }
 
-    const now = new Date();
-    const candidatePool: Array<{
-      dish: any;
-      restaurant: any;
-      branch: any;
-      distanceKm?: number;
-      interactionsCount: number;
-    }> = [];
+  #buildCandidatePool(
+    dishes: Awaited<ReturnType<typeof dishRepository.findRankingPool>>,
+    intent: StructuredIntent,
+    now: Date
+  ): CandidateInput<DishRow>[] {
+    const candidatePool: CandidateInput<DishRow>[] = [];
 
     for (const dish of dishes) {
-      const restaurant = dish.menu.restaurant;
-      if (restaurant.status !== 'ACTIVE') continue;
+      const restaurant = dish.menu?.restaurant;
+      if (!restaurant || restaurant.status !== 'ACTIVE') continue;
 
       // Filter excluded ingredients
       if (intent.excludedIngredients.length > 0) {
-        const dishIngredients = dish.ingredients.map((i) => i.ingredient.name.toLowerCase());
+        const dishIngredients = (dish.ingredients ?? []).map((i) => i.ingredient.name.toLowerCase());
         const hasExcluded = intent.excludedIngredients.some((ex) =>
           dishIngredients.some((di) => di.includes(ex.toLowerCase()))
         );
@@ -131,19 +183,10 @@ export class RecommendationService {
 
       // Check branches and geographic constraints
       for (const branch of restaurant.branches) {
-        let distanceKm: number | undefined;
+        const { distanceKm } = evaluateBranch(branch, intent.location, now);
 
-        if (intent.location) {
-          distanceKm = calculateHaversineDistanceKm(
-            intent.location.latitude,
-            intent.location.longitude,
-            branch.latitude,
-            branch.longitude
-          );
-
-          if (distanceKm > intent.location.radiusKm) {
-            continue; // Outside radius
-          }
+        if (intent.location && (distanceKm === undefined || distanceKm > intent.location.radiusKm)) {
+          continue; // Outside radius (or too far to measure)
         }
 
         candidatePool.push({
@@ -151,93 +194,62 @@ export class RecommendationService {
           restaurant,
           branch,
           distanceKm,
-          interactionsCount: dish._count.interactions,
+          interactionsCount: dish._count?.interactions ?? 0,
         });
       }
     }
 
-    // 4. Score and Rank Candidates
-    const scoredCandidates: ScoredCandidate[] = candidatePool.map((candidate) =>
-      rankingService.scoreCandidate(candidate, intent, userProfile)
-    );
+    return candidatePool;
+  }
 
-    // Sort descending by score
-    scoredCandidates.sort((a, b) => b.score - a.score);
-
-    // Limit to requested top K
-    const topCandidates = scoredCandidates.slice(0, input.limit);
-
-    // 5. Generate Factual Explanations via AI / Rule Provider
-    const facts: RecommendationFact[] = topCandidates.map((c) => ({
+  #buildFacts(candidates: RankedDishRow[]): RecommendationFact[] {
+    return candidates.map((c) => ({
       dishId: c.dish.id,
       dishName: c.dish.name,
       restaurantName: c.restaurant.name,
-      branchName: c.branch.name,
+      branchName: c.branch.name ?? '',
       price: c.dish.price,
-      currency: c.dish.currency,
-      distanceKm: c.distanceKm ? Number(c.distanceKm.toFixed(2)) : undefined,
+      currency: c.dish.currency || 'EGP',
+      distanceKm: c.distanceKm,
       tasteAttributes: c.dish.attributes?.tasteAttributes || [],
       mealCharacteristics: c.dish.attributes?.mealCharacteristics || [],
-      dietaryProperties: c.dish.attributes?.dietaryProperties || [],
-      tags: c.dish.tags.map((t: any) => t.tag.name),
+      dietaryProperties: (c.dish.attributes as any)?.dietaryProperties || [],
+      tags: (c.dish.tags ?? []).map((t) => t.tag.name),
       score: c.score,
     }));
+  }
 
-    const explanations = await explanationService.generateExplanations(
-      input.query || 'Recommended for you',
-      facts
-    );
-
-    // 6. Format Response
-    const formattedRecommendations = topCandidates.map((candidate, index) => ({
-      dish: {
-        id: candidate.dish.id,
-        name: candidate.dish.name,
-        description: candidate.dish.description,
-        price: candidate.dish.price,
-        currency: candidate.dish.currency,
-        imageUrl: candidate.dish.imageUrl,
-        tasteAttributes: candidate.dish.attributes?.tasteAttributes || [],
-        mealCharacteristics: candidate.dish.attributes?.mealCharacteristics || [],
-        dietaryProperties: candidate.dish.attributes?.dietaryProperties || [],
-        tags: candidate.dish.tags.map((t: any) => t.tag.name),
-      },
+  #formatRecommendations(
+    candidates: RankedDishRow[],
+    explanations: string[],
+    now: Date
+  ): Array<Record<string, unknown>> {
+    return candidates.map((candidate, index) => ({
+      // Every dish leaf is produced by the shared dish presenter — the same
+      // flat shape GET /dishes and /search/dishes return (card: one wire shape).
+      dish: presentDish(candidate.dish),
       restaurant: {
-        id: candidate.restaurant.id,
+        id: candidate.restaurant.id ?? '',
         name: candidate.restaurant.name,
-        priceRange: candidate.restaurant.priceRange,
-        logoUrl: candidate.restaurant.logoUrl,
-        cuisines: candidate.restaurant.cuisines.map((c: any) => c.cuisine.name),
+        priceRange: candidate.restaurant.priceRange ?? null,
+        logoUrl: candidate.restaurant.logoUrl ?? null,
+        cuisines: (candidate.restaurant.cuisines ?? []).map((c) => c.cuisine.name),
       },
       branch: {
-        id: candidate.branch.id,
-        name: candidate.branch.name,
-        address: candidate.branch.address,
-        latitude: candidate.branch.latitude,
-        longitude: candidate.branch.longitude,
-        isOpen: branchService.isBranchOpen(candidate.branch.operatingHours, now),
+        id: candidate.branch.id ?? '',
+        name: candidate.branch.name ?? '',
+        address: candidate.branch.address ?? null,
+        latitude: candidate.branch.latitude ?? 0,
+        longitude: candidate.branch.longitude ?? 0,
+        isOpen: evaluateBranch(candidate.branch, null, now).isOpen,
       },
       distanceMeters: candidate.distanceKm !== undefined ? Math.round(candidate.distanceKm * 1000) : null,
       score: candidate.score,
       scoreBreakdown: candidate.scoreBreakdown,
-      reason: explanations[index] || `Top match with score ${(candidate.score * 100).toFixed(0)}%`,
+      reason:
+        explanations[index] ||
+        `Top match with score ${(candidate.score * 100).toFixed(0)}%`,
     }));
-
-    return {
-      request: {
-        originalQuery: input.query || null,
-        surpriseMe: intent.surpriseMe,
-      },
-      interpretation: {
-        maxPrice: intent.maxPrice || null,
-        mealTypes: intent.mealTypes,
-        tasteAttributes: intent.tasteAttributes,
-        preferredCuisines: intent.preferredCuisines,
-        dietaryRestrictions: intent.dietaryRestrictions,
-        atmosphere: intent.atmosphere,
-      },
-      recommendations: formattedRecommendations,
-    };
   }
 }
 
