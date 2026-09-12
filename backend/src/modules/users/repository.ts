@@ -25,7 +25,14 @@ export class UserRepository {
     return prisma.user.create({ data });
   }
 
-  async update(id: string, data: { displayName?: string; avatarUrl?: string }) {
+  async update(
+    id: string,
+    data: {
+      displayName?: string;
+      avatarUrl?: string;
+      role?: 'USER' | 'ADMIN' | 'RESTAURANT_OWNER';
+    }
+  ) {
     return prisma.user.update({
       where: { id },
       data,

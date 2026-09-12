@@ -1,25 +1,16 @@
 /**
- * Auth store — keeps the current token and user in memory, persists the
- * token to expo-secure-store. We also wire the token into the API client
- * via setAuthToken() so the rest of the app doesn't have to think about it.
- *
- * NOTE: This is intentionally minimal — it does NOT implement Supabase Auth
- * flows. It just stores whatever token the caller hands in. The original
- * TasteMood backend accepts two token shapes:
- *   1. A Supabase JWT (HS256 with SUPABASE_JWT_SECRET)
- *   2. A `mock-...` token (dev/test only)
- *
- * When a real Supabase integration is added, swap `signIn` for a
- * supabase.auth.signInWithPassword() call and pass the resulting JWT.
+ * Auth store — keeps the current access token and user in memory and mirrors
+ * the token into the API client via setAuthToken(). Supabase owns the durable
+ * session (persisted to AsyncStorage and auto-refreshed); this store reads
+ * that session on startup and keeps its in-memory token in sync through
+ * onAuthStateChange.
  */
 
-import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 
+import { supabase } from "./supabase";
 import { setAuthToken, getMe, AuthError } from "./api";
 import type { UserProfile } from "@/types/user";
-
-const TOKEN_KEY = "tastemood.auth.token";
 
 interface AuthState {
   token: string | null;
@@ -28,29 +19,13 @@ interface AuthState {
   error?: string;
 
   hydrate: () => Promise<void>;
-  signInWithToken: (token: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string
+  ) => Promise<{ needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
-}
-
-async function readTokenFromSecureStore(): Promise<string | null> {
-  try {
-    return await SecureStore.getItemAsync(TOKEN_KEY);
-  } catch (err) {
-    // SecureStore may be unavailable on the web (uses localStorage fallback).
-    // That's fine — we'll just stay signed out.
-    if (__DEV__) console.warn("[auth] failed to read token from secure store", err);
-    return null;
-  }
-}
-
-async function writeTokenToSecureStore(token: string | null): Promise<void> {
-  try {
-    if (token) await SecureStore.setItemAsync(TOKEN_KEY, token);
-    else await SecureStore.deleteItemAsync(TOKEN_KEY);
-  } catch (err) {
-    if (__DEV__) console.warn("[auth] failed to write token to secure store", err);
-  }
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -60,60 +35,90 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   hydrate: async () => {
     set({ status: "loading" });
-    const token = await readTokenFromSecureStore();
-    if (!token) {
-      set({ status: "signed-out" });
+    const { data } = await supabase.auth.getSession();
+    const session = data.session;
+    if (!session) {
+      set({ token: null, user: null, status: "signed-out" });
       return;
     }
-    setAuthToken(token);
-    set({ token, status: "signed-in" });
-    try {
-      const user = await getMe();
-      set({ user, status: "signed-in" });
-    } catch (err) {
-      if (err instanceof AuthError) {
-        // Stored token is dead/expired — clear it so we don't stay stuck
-        // "signed in" while every authed call 401s (WR-06).
-        if (__DEV__) console.warn("[auth] token rejected on hydrate, signing out", err);
-        setAuthToken(null);
-        await writeTokenToSecureStore(null);
-        set({ token: null, user: null, status: "signed-out" });
-        return;
-      }
-      if (__DEV__) console.warn("[auth] getMe failed during hydrate", err);
-      // Network/other failure: keep the token but drop the user — the
-      // UI can prompt to retry.
-      set({ user: null });
-    }
-  },
 
-  signInWithToken: async (token) => {
-    set({ status: "loading", error: undefined });
-    setAuthToken(token);
-    await writeTokenToSecureStore(token);
-    set({ token, status: "signed-in" });
+    setAuthToken(session.access_token);
+    set({ token: session.access_token, status: "signed-in" });
     try {
       const user = await getMe();
       set({ user });
     } catch (err) {
       if (err instanceof AuthError) {
-        // The pasted token was rejected — don't persist it.
+        // Backend rejected the token — clear the Supabase session so we don't
+        // stay stuck "signed in" while every authed call 401s (WR-06).
+        if (__DEV__) console.warn("[auth] token rejected on hydrate, signing out", err);
+        await supabase.auth.signOut();
         setAuthToken(null);
-        await writeTokenToSecureStore(null);
-        set({ token: null, user: null, status: "error", error: "Invalid token" });
-      } else {
-        set({
-          status: "error",
-          error: err instanceof Error ? err.message : "Sign in failed",
-        });
+        set({ token: null, user: null, status: "signed-out" });
+        return;
       }
+      if (__DEV__) console.warn("[auth] getMe failed during hydrate", err);
+      set({ user: null });
+    }
+  },
+
+  signInWithEmail: async (email, password) => {
+    set({ status: "loading", error: undefined });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) {
+      set({ status: "error", error: error.message });
+      throw error;
+    }
+
+    const token = data.session?.access_token ?? null;
+    setAuthToken(token);
+    set({ token, status: "signed-in" });
+
+    try {
+      const user = await getMe();
+      set({ user });
+    } catch (err) {
+      // Supabase signed us in but the backend profile fetch failed. Keep the
+      // token so the UI can retry, but surface the error to the caller.
+      if (__DEV__) console.warn("[auth] getMe failed after sign in", err);
       throw err;
     }
   },
 
+  signUp: async (email, password) => {
+    set({ status: "loading", error: undefined });
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      set({ status: "error", error: error.message });
+      throw error;
+    }
+
+    // With email confirmation on, Supabase returns no session and the user
+    // must verify before signing in. With it off, a session is created now.
+    const needsEmailConfirmation = !data.session;
+    if (data.session) {
+      const token = data.session.access_token;
+      setAuthToken(token);
+      set({ token, status: "signed-in" });
+      try {
+        const user = await getMe();
+        set({ user });
+      } catch (err) {
+        if (__DEV__) console.warn("[auth] getMe failed after sign up", err);
+      }
+    } else {
+      set({ status: "signed-out" });
+    }
+
+    return { needsEmailConfirmation };
+  },
+
   signOut: async () => {
+    await supabase.auth.signOut();
     setAuthToken(null);
-    await writeTokenToSecureStore(null);
     set({ token: null, user: null, status: "signed-out" });
   },
 
@@ -128,6 +133,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 }));
 
+// Keep the in-memory token in sync with Supabase's session lifecycle — token
+// refresh swaps the access token without a full sign-in, and signOut fires
+// SIGNED_OUT from either this store or a future OAuth/redirect flow.
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_OUT") {
+    setAuthToken(null);
+    useAuthStore.setState({ token: null, user: null, status: "signed-out" });
+  } else if (
+    session &&
+    (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")
+  ) {
+    setAuthToken(session.access_token);
+    useAuthStore.setState({ token: session.access_token, status: "signed-in" });
+  }
+});
+
 // Selector helpers to keep components from re-rendering on irrelevant changes.
-export const selectIsSignedIn = (s: AuthState) => s.status === "signed-in" && !!s.token;
+export const selectIsSignedIn = (s: AuthState) =>
+  s.status === "signed-in" && !!s.token;
 export const selectUser = (s: AuthState) => s.user;

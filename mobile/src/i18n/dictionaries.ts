@@ -126,6 +126,18 @@ export const en = {
   "auth.welcomeBack": "Welcome back",
   "auth.signInSubtitle":
     "Sign in to sync your preferences, saved dishes, and AI history.",
+  "auth.email": "Email",
+  "auth.emailPlaceholder": "you@example.com",
+  "auth.password": "Password",
+  "auth.passwordPlaceholder": "••••••••",
+  "auth.noAccount": "New to TasteMood?",
+  "auth.signUp": "Create account",
+  "auth.createAccount": "Create your account",
+  "auth.signUpSubtitle":
+    "Save your taste profile, favorites, and AI history.",
+  "auth.alreadyHaveAccount": "Already have an account?",
+  "auth.checkEmail": "Check your email",
+  "auth.checkEmailDesc": "We sent a confirmation link to {email}.",
 
   // Personality
   "personality.live": "AI personality • live",
@@ -328,6 +340,17 @@ export const ar: Record<TranslationKey, string> = {
   // Auth
   "auth.welcomeBack": "أهلًا بعودتك",
   "auth.signInSubtitle": "سجّل الدخول لمزامنة تفضيلاتك ومحفوظاتك وسجل الذكاء الاصطناعي.",
+  "auth.email": "البريد الإلكتروني",
+  "auth.emailPlaceholder": "you@example.com",
+  "auth.password": "كلمة المرور",
+  "auth.passwordPlaceholder": "••••••••",
+  "auth.noAccount": "جديد على TasteMood؟",
+  "auth.signUp": "إنشاء حساب",
+  "auth.createAccount": "أنشئ حسابك",
+  "auth.signUpSubtitle": "احفظ ملف ذوقك ومحفوظاتك وسجل الذكاء الاصطناعي.",
+  "auth.alreadyHaveAccount": "لديك حساب بالفعل؟",
+  "auth.checkEmail": "تحقق من بريدك",
+  "auth.checkEmailDesc": "أرسلنا رابط تأكيد إلى {email}.",
 
   // Personality
   "personality.live": "الشخصية الذكية • مباشر",

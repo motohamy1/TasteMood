@@ -107,6 +107,18 @@ export default function RootLayout() {
                 headerTitleStyle: { color: COLORS.cream, fontWeight: "700" },
               }}
             />
+            <Stack.Screen
+              name="sign-up"
+              options={{
+                headerShown: true,
+                title: "Sign up",
+                presentation: "modal",
+                headerBackTitle: "Close",
+                headerStyle: { backgroundColor: COLORS.ink950 },
+                headerTintColor: COLORS.cream,
+                headerTitleStyle: { color: COLORS.cream, fontWeight: "700" },
+              }}
+            />
           </Stack>
           {/* Translucent + transparent so the warm ink950 ground draws
               behind the clock/wifi/battery icons instead of a solid

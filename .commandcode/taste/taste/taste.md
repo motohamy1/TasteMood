@@ -17,3 +17,4 @@
 - Prefers fixing data at import time over UI fallbacks: synthesizes names for unnamed places from tags + street rather than showing generic category labels or hiding them. Confidence: 0.6
 - Wants a full bilingual (EN + AR only) app UI with i18n now, not deferred as a separate later project: full RTL layout mirroring (native Arabic feel, I18nManager, layout audit across screens) rather than text-direction-only rendering, and language switching that defaults to the device locale with a persisted in-app override. Confidence: 0.8
 - Seeds complete reference data up front (all 27 Egyptian governorates + Dakahlia's cities) with importer auto-create on demand during expansion, rather than minimal seeding. Confidence: 0.6
+- Prefers persistent, auto-refreshing auth sessions (e.g. Supabase `persistSession: true` backed by AsyncStorage) over stateless token handling that forces re-login on token expiry. Confidence: 0.7

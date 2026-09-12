@@ -1,6 +1,6 @@
 import type { PlaceKind } from './taxonomy.js';
 
-export type ImportSource = 'OSM' | 'OVERTURE' | 'FOURSQUARE';
+export type ImportSource = 'OSM' | 'OVERTURE' | 'FOURSQUARE' | 'CSV_PLACES';
 
 export interface OpeningHour {
   dayOfWeek: number; // 0 = Sunday … 6 = Saturday (matches BranchOperatingHour)

@@ -7,7 +7,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Stack, router } from "expo-router";
+import { Stack, router, Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuthStore } from "@/lib/auth-store";
@@ -16,31 +16,21 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/i18n";
 import { COLORS } from "@/lib/theme";
 
-/**
- * /auth — present modally from the Favourites / Personality / Profile screens.
- *
- * For now this is a dev-friendly screen that accepts either:
- *   1. A Supabase JWT pasted in (for testing the real path), or
- *   2. A `mock-user-...` / `mock-admin-...` token (the backend accepts these in dev)
- *
- * Swap the body for `supabase.auth.signInWithPassword()` once the
- * Supabase project is wired up — the rest of the app only depends on
- * `signInWithToken(token)`.
- */
 export default function AuthScreen() {
   const insets = useSafeAreaInsets();
   const t = useT();
-  const signInWithToken = useAuthStore((s) => s.signInWithToken);
-  const [token, setToken] = useState("");
+  const signInWithEmail = useAuthStore((s) => s.signInWithEmail);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(t: string) {
-    if (!t.trim()) return;
+  async function submit() {
+    if (!email.trim() || !password) return;
     setBusy(true);
     setError(null);
     try {
-      await signInWithToken(t.trim());
+      await signInWithEmail(email.trim(), password);
       router.back();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed");
@@ -48,6 +38,8 @@ export default function AuthScreen() {
       setBusy(false);
     }
   }
+
+  const canSubmit = email.trim().length > 0 && password.length > 0;
 
   return (
     <View className="flex-1 bg-ink-950 overflow-hidden">
@@ -57,18 +49,19 @@ export default function AuthScreen() {
         contentContainerClassName="px-5 gap-4"
         contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 32 }}
         contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <Stack.Screen
           options={{
-            title: "Sign in",
+            title: t("common.signIn"),
             presentation: "modal",
           }}
         />
 
         <View className="gap-1">
           <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
-            Access • JWT
+            {t("common.signIn")}
           </Text>
           <Text className="text-2xl font-bold text-brand-50">
             {t("auth.welcomeBack")}
@@ -78,27 +71,48 @@ export default function AuthScreen() {
           </Text>
         </View>
 
-        <View className="gap-2">
-          <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
-            Auth token
-          </Text>
-          <TextInput
-            value={token}
-            onChangeText={setToken}
-            placeholder="paste a JWT, or use a mock-* token"
-            placeholderTextColor={COLORS.mute}
-            className="bg-ink-900 border border-ink-700 rounded-2xl px-4 py-3 text-sm text-cream"
-            autoCapitalize="none"
-            autoCorrect={false}
-            multiline
-            numberOfLines={3}
-          />
+        <View className="gap-3">
+          <View className="gap-1.5">
+            <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
+              {t("auth.email")}
+            </Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder={t("auth.emailPlaceholder")}
+              placeholderTextColor={COLORS.mute}
+              className="bg-ink-900 border border-ink-700 rounded-2xl px-4 py-3 text-sm text-cream"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              autoComplete="email"
+              textContentType="emailAddress"
+            />
+          </View>
+
+          <View className="gap-1.5">
+            <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
+              {t("auth.password")}
+            </Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder={t("auth.passwordPlaceholder")}
+              placeholderTextColor={COLORS.mute}
+              className="bg-ink-900 border border-ink-700 rounded-2xl px-4 py-3 text-sm text-cream"
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete="password"
+              textContentType="password"
+            />
+          </View>
+
           <Pressable
-            onPress={() => submit(token)}
-            disabled={busy || !token.trim()}
+            onPress={submit}
+            disabled={busy || !canSubmit}
             className={cn(
               "rounded-full py-3 items-center",
-              busy || !token.trim() ? "bg-ink-700" : "bg-brand-cta active:opacity-85"
+              busy || !canSubmit ? "bg-ink-700" : "bg-brand-cta active:opacity-85"
             )}
           >
             {busy ? (
@@ -107,7 +121,7 @@ export default function AuthScreen() {
               <Text
                 className={cn(
                   "text-sm font-bold",
-                  busy || !token.trim() ? "text-cream-mute" : "text-night"
+                  busy || !canSubmit ? "text-cream-mute" : "text-night"
                 )}
               >
                 {t("common.signIn")}
@@ -120,27 +134,16 @@ export default function AuthScreen() {
               {error}
             </Text>
           ) : null}
-        </View>
 
-        <View className="bg-ink-900 border border-wine rounded-2xl p-3 gap-1">
-          <Text className="text-[10px] font-bold uppercase tracking-[0.12em] text-accent">
-            Dev shortcuts
-          </Text>
-          <Text className="text-xs text-cream-dim">
-            The backend accepts tokens starting with{" "}
-            <Text className="font-mono">mock-</Text> in development. Try:
-          </Text>
-          <View className="flex-row flex-wrap gap-2 mt-1">
-            {["mock-user-demo", "mock-admin-demo"].map((mock) => (
-              <Pressable
-                key={mock}
-                onPress={() => submit(mock)}
-                disabled={busy}
-                className="border border-ink-700 px-3 py-1.5 rounded-full active:opacity-70"
-              >
-                <Text className="text-xs text-accent font-medium">{mock}</Text>
+          <View className="flex-row items-center justify-center gap-1 mt-1">
+            <Text className="text-xs text-cream-mute">{t("auth.noAccount")}</Text>
+            <Link href="/sign-up" asChild>
+              <Pressable className="py-1">
+                <Text className="text-xs font-semibold text-accent">
+                  {t("auth.signUp")}
+                </Text>
               </Pressable>
-            ))}
+            </Link>
           </View>
         </View>
       </ScrollView>
