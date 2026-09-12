@@ -67,7 +67,7 @@ export default function AuthScreen() {
         />
 
         <View className="gap-1">
-          <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+          <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
             Access • JWT
           </Text>
           <Text className="text-2xl font-bold text-brand-50">
@@ -98,7 +98,7 @@ export default function AuthScreen() {
             disabled={busy || !token.trim()}
             className={cn(
               "rounded-full py-3 items-center",
-              busy || !token.trim() ? "bg-ink-700" : "bg-brand-500 active:opacity-85"
+              busy || !token.trim() ? "bg-ink-700" : "bg-brand-cta active:opacity-85"
             )}
           >
             {busy ? (
@@ -116,14 +116,14 @@ export default function AuthScreen() {
           </Pressable>
 
           {error ? (
-            <Text className="text-xs text-[#FECACA]" selectable>
+            <Text className="text-xs text-danger" selectable>
               {error}
             </Text>
           ) : null}
         </View>
 
         <View className="bg-ink-900 border border-wine rounded-2xl p-3 gap-1">
-          <Text className="text-[10px] font-bold uppercase tracking-[0.12em] text-brand-500">
+          <Text className="text-[10px] font-bold uppercase tracking-[0.12em] text-accent">
             Dev shortcuts
           </Text>
           <Text className="text-xs text-cream-dim">
@@ -138,7 +138,7 @@ export default function AuthScreen() {
                 disabled={busy}
                 className="border border-ink-700 px-3 py-1.5 rounded-full active:opacity-70"
               >
-                <Text className="text-xs text-brand-500 font-medium">{mock}</Text>
+                <Text className="text-xs text-accent font-medium">{mock}</Text>
               </Pressable>
             ))}
           </View>

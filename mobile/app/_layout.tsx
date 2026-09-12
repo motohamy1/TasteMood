@@ -1,16 +1,14 @@
 import "../src/global.css";
 
 import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import {
-  QueryClient,
+import { QueryClient,
   QueryClientProvider,
   QueryCache,
   MutationCache,
 } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { I18nManager } from "react-native";
+import { I18nManager, StatusBar } from "react-native";
 import { useEffect, useMemo } from "react";
 
 import { AuthError } from "@/lib/api";
@@ -110,7 +108,14 @@ export default function RootLayout() {
               }}
             />
           </Stack>
-          <StatusBar style="light" />
+          {/* Translucent + transparent so the warm ink950 ground draws
+              behind the clock/wifi/battery icons instead of a solid
+              system strip. Icons stay light via barStyle. */}
+          <StatusBar
+            barStyle="light-content"
+            translucent
+            backgroundColor="transparent"
+          />
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

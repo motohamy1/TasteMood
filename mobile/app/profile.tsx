@@ -46,7 +46,7 @@ function ToggleChip({
       onPress={onPress}
       className={cn(
         "px-2.5 py-1 rounded-full border",
-        active ? "bg-brand-500 border-brand-500" : "border-ink-700"
+        active ? "bg-brand-cta border-brand-cta" : "border-ink-700"
       )}
     >
       <Text
@@ -103,7 +103,7 @@ function LanguageSwitcher() {
             className={cn(
               "px-4 py-1.5 rounded-full border",
               lang === option.value
-                ? "bg-brand-500 border-brand-500"
+                ? "bg-brand-cta border-brand-cta"
                 : "border-ink-700"
             )}
           >
@@ -150,7 +150,7 @@ export default function ProfileScreen() {
         >
           <View className="px-4 gap-3">
           <View className="gap-1">
-            <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+            <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
               {t("profile.youGuest")}
             </Text>
             <Text className="text-2xl font-bold text-brand-50">{t("profile.title")}</Text>
@@ -171,7 +171,7 @@ export default function ProfileScreen() {
           </View>
 
           <Link href="/auth" asChild>
-            <Pressable className="bg-brand-500 rounded-full py-3 items-center mt-2 active:opacity-85">
+            <Pressable className="bg-brand-cta rounded-full py-3 items-center mt-2 active:opacity-85">
               <Text className="text-night text-sm font-bold">{t("common.signIn")}</Text>
             </Pressable>
           </Link>
@@ -222,7 +222,7 @@ export default function ProfileScreen() {
       >
         <View className="px-4 gap-4">
         <View className="gap-1">
-          <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+          <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
             {t("profile.youPreferences")}
           </Text>
           <Text className="text-2xl font-bold text-brand-50">{t("profile.title")}</Text>
@@ -255,7 +255,7 @@ export default function ProfileScreen() {
                   className={cn(
                     "flex-1 h-9 rounded-lg items-center justify-center",
                     prefs.spicePreference === level
-                      ? "bg-brand-500"
+                      ? "bg-brand-cta"
                       : "bg-ink-950"
                   )}
                 >
@@ -316,7 +316,7 @@ export default function ProfileScreen() {
                 />
                 <Pressable
                   onPress={addCuisines}
-                  className="bg-brand-500 px-4 h-10 rounded-full items-center justify-center active:opacity-85"
+                  className="bg-brand-cta px-4 h-10 rounded-full items-center justify-center active:opacity-85"
                 >
                   <Text className="text-night text-xs font-bold">{t("common.add")}</Text>
                 </Pressable>

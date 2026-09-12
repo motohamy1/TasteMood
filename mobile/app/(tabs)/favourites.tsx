@@ -38,7 +38,7 @@ export default function FavouritesScreen() {
         <View className="px-4 gap-3">
         <View className="flex-row items-start gap-3">
           <View className="flex-1 gap-1">
-            <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+            <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
               {t("favourites.saved")} • GET /favourites
             </Text>
             <Text className="text-2xl font-bold text-brand-50">
@@ -60,7 +60,7 @@ export default function FavouritesScreen() {
               {t("favourites.signInNote")}
             </Text>
             <Link href="/auth" asChild>
-              <Pressable className="bg-brand-500 rounded-full px-4 py-2 self-start mt-1 active:opacity-85">
+              <Pressable className="bg-brand-cta rounded-full px-4 py-2 self-start mt-1 active:opacity-85">
                 <Text className="text-night text-sm font-bold">{t("common.signIn")}</Text>
               </Pressable>
             </Link>

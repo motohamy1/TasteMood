@@ -11,6 +11,7 @@ import { SearchBar } from "@/components/search-bar";
 import { EmptyState } from "@/components/empty-state";
 import { AmbientGlow } from "@/components/ambient-glow";
 import { pickLabel, useLang, useT } from "@/i18n";
+import { COLORS } from "@/lib/theme";
 
 /**
  * Dishes: the full browse-all screen. Search + cuisine filter over a
@@ -67,14 +68,14 @@ export default function DishesScreen() {
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={refetch}
-            tintColor="#DB9338"
-            colors={["#DB9338"]}
+            tintColor={COLORS.amber}
+            colors={[COLORS.amber]}
           />
         }
       >
         <View className="gap-3">
           <View className="flex-row items-center justify-between">
-            <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+            <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
               {isLoading ? t("common.loading") : t("dishes.count", { count: dishes.length })}
             </Text>
             <Text className="text-[10px] font-semibold uppercase tracking-[0.08em] text-cream-mute">

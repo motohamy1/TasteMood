@@ -79,3 +79,55 @@ _Avoid_: Empty result, AI failure
 **Structured Intent**:
 A normalized description of what the user wants from a recommendation session, including taste, meal, dietary, atmosphere, price, location, and situational signals.
 _Avoid_: AI prompt, recommendation prompt
+
+## Place Data
+
+**Place**:
+A real food or drink business that TasteMood can identify and show to users.
+_Avoid_: Restaurant (when the place is a cafe, bakery, juice shop, food stall, or another food-and-drink business)
+
+**Official Name**:
+The primary name supplied by the place's data source or the business owner. TasteMood displays it exactly as supplied, including Arabic, English, or another language.
+_Avoid_: Translated name, normalized name, AI name
+
+**Alternate Name**:
+A source-supplied or owner-supplied name in another language. It may support search and accessibility, but it does not replace the Official Name.
+_Avoid_: Replacement name, automatic translation
+
+**Factual Description**:
+A description supported by a source, the business owner, or an approved editorial review. If no supported description exists, the value is absent rather than invented.
+_Avoid_: AI description, inferred description
+
+**Source Record**:
+A representation of a place, branch, menu, dish, price, or opening hour received from a named external source, owner, or approved editor, with provenance and freshness information.
+_Avoid_: Scraped data (unless the acquisition method is explicitly authorized)
+
+**Authorized Source**:
+A source TasteMood is permitted to use through an official API, licensed feed, written partnership, owner submission, or another documented permission. Public visibility alone does not make a source authorized.
+_Avoid_: Free-to-scrape source, public data by default
+
+**Data Provenance**:
+The source, acquisition time, source identifier, and verification state attached to a factual record.
+_Avoid_: Confidence score when provenance is required
+
+**Verified Availability**:
+A place, menu item, price, or opening hour that has current supporting evidence and may be used as a factual recommendation.
+_Avoid_: AI-generated availability, likely available
+
+**Estimated Content**:
+AI-generated or inferred content that has not been confirmed by a source, owner, or editor. It may assist internal workflows but must not be presented as verified menu or place data.
+_Avoid_: Real menu, actual item, factual listing
+
+**Rural Place**:
+A Place discoverable by its coordinates even when it cannot be assigned to a known city. City classification is optional; governorate and coordinate coverage must not depend on an urban-city list.
+_Avoid_: Unmapped place, invalid place
+
+## Resolved Product Decisions
+
+- TasteMood is a source-backed food-and-drink directory for Egypt, not a demo catalogue of invented restaurants and menus.
+- `prisma db seed` data is development/reference data only. Real place data enters through authorized source records and must not be erased by routine seeding.
+- Google Maps/Places, Talabat, Waffarha, and similar services may be used only through an official API, license, partnership, owner-provided data, or another documented permission. Lack of app-store deployment does not remove their terms of service, database rights, privacy duties, or access restrictions.
+- Official names are preserved exactly. Arabic names remain Arabic; English or other-language business names remain as supplied. Translation is an alternate value, never an overwrite.
+- Arabic is the default user-facing language for descriptions when a supported Arabic description exists. No description is preferable to an invented factual description.
+- Exact coordinates are the primary basis for discovery, including rural areas. Missing city classification must not hide a place.
+- AI may classify, translate, explain, or propose content, but only verified source/owner/editor data can be shown as an actual menu item, price, opening hour, or availability claim.

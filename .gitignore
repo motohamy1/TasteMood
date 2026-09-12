@@ -54,3 +54,14 @@ web-build/
 # Prisma & Database
 prisma/*.db
 prisma/*.db-journal
+
+.commandcode
+/.commandcode
+/commandcode
+commandcode/
+.commandcode/taste/
+
+graphify-out
+graphify-out/
+
+.crush/

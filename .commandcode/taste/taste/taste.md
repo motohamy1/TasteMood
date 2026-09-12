@@ -1,6 +1,6 @@
 # Taste
 - Prefers to start new work from a branch/worktree that is at the same commit as main, and asks to verify up-to-dateness against main before beginning. Confidence: 0.4
-- When presented with a multi-item list of review/recommendation findings, prefers applying all of them in one go ("apply all") rather than being asked to choose or prioritize which to do first. Confidence: 0.6
+- When presented with a multi-item list of review/recommendation findings, prefers applying all of them in one go rather than being asked to choose or prioritize which to do first — confirmed twice with terse blanket approvals ("apply all", "yes apply") to a full audit's worth of changes, including ones that alter established brand visuals. Confidence: 0.75
 - TasteMood is a real production app, not a demo/portfolio: real, accurate place data matters. Scope starts with the whole Dakahlia governorate (including rural districts, not just Mansoura) then expands to all of Egypt. Confidence: 0.9
 - Prefers bilingual data (Arabic + English) wherever the source provides it — locals search in Arabic. Confidence: 0.8
 - When a place/dish name is Arabic-only, prefers keeping the Arabic as-is (no AI transliteration/translation) and fixing LTR/RTL text-direction rendering in the UI instead. Confidence: 0.8

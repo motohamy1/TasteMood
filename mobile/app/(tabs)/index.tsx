@@ -21,6 +21,7 @@ import { SearchBar } from "@/components/search-bar";
 import { EmptyState } from "@/components/empty-state";
 import { AmbientGlow } from "@/components/ambient-glow";
 import { pickLabel, useLang, useT } from "@/i18n";
+import { COLORS } from "@/lib/theme";
 
 /**
  * Home (Discover): greeting header, search, cuisine pills (API-driven),
@@ -90,8 +91,8 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={refetch}
-            tintColor="#DB9338"
-            colors={["#DB9338"]}
+            tintColor={COLORS.amber}
+            colors={[COLORS.amber]}
           />
         }
       >
@@ -101,7 +102,7 @@ export default function HomeScreen() {
           <View className="flex-1 gap-1">
             <View className="flex-row items-center gap-1.5">
               <View className="w-2 h-2 rounded-full bg-brand-500" />
-              <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+              <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
                 {t("home.discover")} • {greeting}
               </Text>
             </View>
@@ -187,7 +188,7 @@ export default function HomeScreen() {
               </View>
               {!isFiltering && dishes.length > 5 ? (
                 <Link href="/dishes" asChild>
-                  <Text className="text-center text-sm font-semibold text-brand-500 mt-1">
+                  <Text className="text-center text-sm font-semibold text-accent mt-1">
                     {t("home.browseAll")}
                   </Text>
                 </Link>

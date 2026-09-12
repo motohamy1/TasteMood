@@ -3,21 +3,14 @@ import type { RecommendationRequest } from "@/types/recommendation";
 
 /**
  * Recommendation request-authoring domain (card 07): the AI screen's payload
- * building — mood/prompt/query merging and the maxPrice NaN guard from WR-04 —
+ * building — mood/price/query merging and the maxPrice NaN guard from WR-04 —
  * is a pure module instead of screen-local state + constants. Backend
  * vocabulary stays out of the screen; this file owns it.
+ *
+ * Presets are two independent single-select sections: mood (taste direction)
+ * and price (max budget). Selections stage locally; the screen submits them
+ * only on explicit confirm.
  */
-
-export const QUICK_PROMPTS: Array<{
-  labelKey: TranslationKey;
-  payload: Partial<RecommendationRequest>;
-}> = [
-  { labelKey: "ai.promptSpicy", payload: { maxPrice: 200, tasteAttributes: ["SPICY"] } },
-  { labelKey: "ai.promptHealthy", payload: { mealTypes: ["LIGHT"] } },
-  { labelKey: "ai.promptSweet", payload: { tasteAttributes: ["SWEET"], mealTypes: ["DESSERT"] } },
-  { labelKey: "ai.promptVegan", payload: { dietaryRestrictions: ["VEGAN"] } },
-  { labelKey: "ai.promptSurprise", payload: { surpriseMe: true } },
-];
 
 export const MOODS: Array<{
   emoji: string;
@@ -32,9 +25,19 @@ export const MOODS: Array<{
   { emoji: "🌙", labelKey: "ai.moodLateNight", query: "quick late night snack" },
 ];
 
+/**
+ * Price presets (EGP). `maxPrice: null` means "Any price" (no cap).
+ * Labels render via `ai.priceAny` / `ai.priceUnder` with `{price}`.
+ */
+export const PRICE_PRESETS: Array<{ maxPrice: number | null }> = [
+  { maxPrice: null },
+  { maxPrice: 150 },
+  { maxPrice: 250 },
+  { maxPrice: 400 },
+];
+
 export interface RecommendationSelections {
   query: string;
-  activePrompt: number | null;
   activeMood: number | null;
   /** Raw TextInput string — parsed defensively so NaN never reaches the wire. */
   maxPriceInput: string;
@@ -44,19 +47,17 @@ export interface RecommendationSelections {
 export function buildRecommendationRequest(
   selections: RecommendationSelections
 ): RecommendationRequest | null {
-  const { query, activePrompt, activeMood, maxPriceInput } = selections;
+  const { query, activeMood, maxPriceInput } = selections;
   const trimmedQuery = query.trim();
-  if (!trimmedQuery && activePrompt === null && activeMood === null) return null;
-
   const parsedPrice = maxPriceInput.trim() ? Number(maxPriceInput) : NaN;
-  const base: RecommendationRequest = {
+  const maxPrice =
+    Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : undefined;
+  if (!trimmedQuery && activeMood === null && maxPrice === undefined)
+    return null;
+
+  return {
     query: trimmedQuery || (activeMood !== null ? MOODS[activeMood].query : undefined),
-    maxPrice:
-      Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : undefined,
+    maxPrice,
     limit: 6,
   };
-
-  return activePrompt !== null
-    ? { ...base, ...QUICK_PROMPTS[activePrompt].payload }
-    : base;
 }

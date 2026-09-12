@@ -127,7 +127,7 @@ function ToggleChip({
       onPress={onPress}
       className={cn(
         "px-2.5 py-1.5 rounded-full border active:opacity-80",
-        active ? "bg-brand-500 border-brand-500" : "border-ink-700"
+        active ? "bg-brand-cta border-brand-cta" : "border-ink-700"
       )}
     >
       <Text className={cn("text-[11px]", active ? "font-semibold text-night" : "text-cream")}>
@@ -200,17 +200,17 @@ function RecommendationResults({
       <View className="px-4 gap-2.5">
         <View className="flex-row items-baseline justify-between">
           <Text className="text-[13px] leading-[16px] font-bold text-brand-50">{t("personality.todaysPicks")}</Text>
-          <Text className="text-[10px] leading-[12px] font-semibold text-brand-500">{picks.length ? t("personality.matched", { count: picks.length }) : ""}</Text>
+          <Text className="text-[10px] leading-[12px] font-semibold text-accent">{picks.length ? t("personality.matched", { count: picks.length }) : ""}</Text>
         </View>
         {isLoading ? (
           <View className="flex-row flex-wrap gap-2.5"><DishSkeletonGrid count={4} /></View>
         ) : isError ? (
-          <View className="flex-row items-center gap-1.5 bg-brand-950 border border-[#7F1D1D] rounded-xl px-2.5 py-2">
+          <View className="flex-row items-center gap-1.5 bg-danger-bg border border-danger-line rounded-xl px-2.5 py-2">
             <Text className="text-xs">⚠️</Text>
-            <Text className="text-[10px] font-semibold uppercase text-[#FECACA] flex-1">
+            <Text className="text-[10px] font-semibold uppercase text-danger flex-1">
               {error?.message ?? t("personality.unavailable")}
             </Text>
-            <Pressable onPress={() => void refetch()}><Text className="text-[10px] font-bold text-brand-500">{t("common.retry")}</Text></Pressable>
+            <Pressable onPress={() => void refetch()}><Text className="text-[10px] font-bold text-accent">{t("common.retry")}</Text></Pressable>
           </View>
         ) : picks.length === 0 ? (
           <View className="gap-2">
@@ -228,7 +228,7 @@ function RecommendationResults({
                   item={item}
                   onFeedback={onFeedback ? (type) => onFeedback(item, type) : undefined}
                 />
-                {feedback[item.dish.id] ? <Text className="text-[9px] text-brand-500 text-center mt-1">{t("personality.signalSaved")}</Text> : null}
+                {feedback[item.dish.id] ? <Text className="text-[9px] text-accent text-center mt-1">{t("personality.signalSaved")}</Text> : null}
               </View>
             ))}
           </View>
@@ -242,7 +242,7 @@ function RecommendationResults({
             <Text className="text-[11px] leading-[15px] text-cream-mute">
               {picks[0]?.reason ?? t("personality.whyTheseFit")}
             </Text>
-            <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.04em] text-brand-500">
+            <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.04em] text-accent">
               {t("personality.aiInterprets")}
             </Text>
           </View>
@@ -495,8 +495,8 @@ export default function PersonalityScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => void recommendation.refetch()}
-            tintColor="#DB9338"
-            colors={["#DB9338"]}
+            tintColor={COLORS.amber}
+            colors={[COLORS.amber]}
           />
         }
       >
@@ -505,7 +505,7 @@ export default function PersonalityScreen() {
             <View className="flex-1 gap-1">
               <View className="flex-row items-center gap-1.5">
                 <View className="w-2 h-2 rounded-full bg-brand-500" />
-                <Text className="text-[10px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-brand-500">
+                <Text className="text-[10px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-accent">
                   {t("personality.live")}
                 </Text>
               </View>
@@ -540,7 +540,7 @@ export default function PersonalityScreen() {
                   <Text className="text-[18px] leading-[22px]">🌶️</Text>
                 </View>
                 <View className="flex-1 gap-0.5">
-                  <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.12em] text-brand-500 uppercase">
+                  <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.12em] text-accent uppercase">
                     {loadingPrefs && isSignedIn
                       ? t("personality.readingProfile")
                       : t(archetypeKey(spice, cuisines.length))}
@@ -553,7 +553,7 @@ export default function PersonalityScreen() {
                 </View>
                 <Link href="/profile" asChild>
                   <Pressable hitSlop={8}>
-                    <Text className="text-[11px] leading-[14px] font-semibold text-brand-500">{t("common.edit")}</Text>
+                    <Text className="text-[11px] leading-[14px] font-semibold text-accent">{t("common.edit")}</Text>
                   </Pressable>
                 </Link>
               </View>
@@ -562,7 +562,7 @@ export default function PersonalityScreen() {
               {!isSignedIn ? (
                 <Link href="/auth" asChild>
                   <Pressable hitSlop={4}>
-                    <Text className="text-[11px] leading-[14px] font-semibold text-brand-500">
+                    <Text className="text-[11px] leading-[14px] font-semibold text-accent">
                       {t("personality.signInToSave")}
                     </Text>
                   </Pressable>
@@ -614,7 +614,7 @@ export default function PersonalityScreen() {
                   </View>
                 ) : null}
                 {savingSetup ? <ActivityIndicator color={COLORS.amber} /> : null}
-                {setupError ? <Text className="text-[10px] font-semibold text-[#FECACA]">{setupError}</Text> : null}
+                {setupError ? <Text className="text-[10px] font-semibold text-danger">{setupError}</Text> : null}
               </View>
             </View>
           ) : null}
@@ -630,7 +630,7 @@ export default function PersonalityScreen() {
                 </Text>
               </View>
               {isDirty ? (
-                <Text className="text-[10px] font-semibold text-brand-500">{t("personality.changesWaiting")}</Text>
+                <Text className="text-[10px] font-semibold text-accent">{t("personality.changesWaiting")}</Text>
               ) : null}
             </View>
             <View className="flex-row flex-wrap gap-1.5">
@@ -653,7 +653,7 @@ export default function PersonalityScreen() {
                 returnKeyType="done"
                 onSubmitEditing={updatePicks}
               />
-              <Pressable onPress={updatePicks} className="bg-brand-500 rounded-full px-3 py-2 active:opacity-80">
+              <Pressable onPress={updatePicks} className="bg-brand-cta rounded-full px-3 py-2 active:opacity-80">
                 <Text className="text-[10px] font-bold text-night">{t("common.update")}</Text>
               </Pressable>
             </View>
@@ -670,7 +670,7 @@ export default function PersonalityScreen() {
                     {weatherOption?.emoji ?? live.emoji ?? "🌤️"} {t("personality.weather")}
                   </Text>
                   <Pressable onPress={() => patchSession({ weatherEnabled: !session.weatherEnabled })}>
-                    <Text className="text-[10px] font-semibold text-brand-500">
+                    <Text className="text-[10px] font-semibold text-accent">
                       {session.weatherEnabled ? t("common.on") : t("common.off")}
                     </Text>
                   </Pressable>
@@ -689,7 +689,7 @@ export default function PersonalityScreen() {
                 <View className="flex-row items-center justify-between">
                   <Text className="text-[11px] font-semibold text-cream">🕰️ {t("personality.timeSlot")}</Text>
                   <Pressable onPress={() => patchSession({ timeEnabled: !session.timeEnabled })}>
-                    <Text className="text-[10px] font-semibold text-brand-500">{session.timeEnabled ? t("common.on") : t("common.off")}</Text>
+                    <Text className="text-[10px] font-semibold text-accent">{session.timeEnabled ? t("common.on") : t("common.off")}</Text>
                   </Pressable>
                 </View>
                 <Text className="text-[10px] text-cream-mute">
@@ -716,7 +716,7 @@ export default function PersonalityScreen() {
               </View>
             </View>
             {isDirty ? (
-              <Pressable onPress={updatePicks} className="bg-brand-500 rounded-full py-3 items-center active:opacity-80">
+              <Pressable onPress={updatePicks} className="bg-brand-cta rounded-full py-3 items-center active:opacity-80">
                 <Text className="text-sm font-bold text-night">{t("personality.updatePicks")}</Text>
               </Pressable>
             ) : null}

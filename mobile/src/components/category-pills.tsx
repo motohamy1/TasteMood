@@ -30,7 +30,7 @@ export function CategoryPills({ options, selected, onSelect }: Props) {
             onPress={() => onSelect(option.value)}
             className={cn(
               "px-3.5 py-1.5 rounded-full border",
-              isActive ? "bg-brand-500 border-brand-500" : "border-ink-700"
+              isActive ? "bg-brand-cta border-brand-cta" : "border-ink-700"
             )}
           >
             <Text

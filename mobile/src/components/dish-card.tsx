@@ -42,31 +42,31 @@ export function DishCard({ dish, className }: Props) {
         <View className="p-2.5 gap-0.5">
           <Text
             numberOfLines={1}
-            className="text-[13px] font-bold text-night"
+            className="text-[13px] font-bold text-oncard"
           >
             {name}
           </Text>
 
-          <Text numberOfLines={1} className="text-[10px] text-cream-faint">
+          <Text numberOfLines={1} className="text-[10px] text-oncard-muted">
             {displayName(lang, { name: dish.restaurantName, nameEn: dish.restaurantNameEn })}
             {dish.branchName ? ` · ${dish.branchName}` : ""}
           </Text>
 
           <View className="flex-row items-center gap-1.5 mt-0.5">
-            <Text className="text-[13px] font-extrabold text-brand-600">
+            <Text className="text-[13px] font-extrabold text-oncard-price">
               {formatPrice(dish.price, dish.currency)}
             </Text>
 
             {isEstimated ? (
-              <View className="px-1.5 py-px rounded-full border border-ink-700">
-                <Text className="text-[8px] font-semibold text-cream-mute">
+              <View className="px-1.5 py-px rounded-full border border-cardline">
+                <Text className="text-[8px] font-semibold text-oncard-muted">
                   {t("dish.estimated")}
                 </Text>
               </View>
             ) : null}
 
             {typeof dish.rating === "number" ? (
-              <Text className="text-[10px] text-stone-600">
+              <Text className="text-[10px] text-oncard-muted">
                 ★ {dish.rating.toFixed(1)}
                 {dish.reviewCount && dish.reviewCount > 0 ? ` (${dish.reviewCount})` : ""}
               </Text>
@@ -78,9 +78,9 @@ export function DishCard({ dish, className }: Props) {
               {dish.tasteAttributes.slice(0, 3).map((tag) => (
                 <View
                   key={tag}
-                  className="px-1.5 py-px rounded-full border border-brand-100"
+                  className="px-1.5 py-px rounded-full border border-clay-100"
                 >
-                  <Text className="text-[9px] text-brand-700 font-semibold">
+                  <Text className="text-[9px] text-oncard-tag font-semibold">
                     {tag.toLowerCase().replace(/_/g, " ")}
                   </Text>
                 </View>

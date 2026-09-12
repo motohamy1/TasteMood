@@ -46,44 +46,44 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
         <View className="p-2.5 gap-1">
           <Text
             numberOfLines={1}
-            className="text-[13px] leading-4 font-bold text-night"
+            className="text-[13px] leading-4 font-bold text-oncard"
           >
             {name}
           </Text>
 
-          <Text numberOfLines={1} className="text-[10px] leading-3 text-cream-faint">
+          <Text numberOfLines={1} className="text-[10px] leading-3 text-oncard-muted">
             {restaurant ? displayName(lang, restaurant) : t("card.unknownRestaurant")}
             {branch?.name ? ` · ${branch.name}` : ""}
             {distance ? ` · ${distance}` : ""}
           </Text>
 
           <View className="flex-row items-center gap-2">
-            <Text className="text-[13px] leading-4 font-extrabold text-brand-600">
+            <Text className="text-[13px] leading-4 font-extrabold text-oncard-price">
               {formatPrice(dish.price, dish.currency)}
             </Text>
             {isEstimated ? (
-              <View className="px-1.5 py-px rounded-full border border-ink-700">
-                <Text className="text-[8px] font-semibold text-cream-mute">
+              <View className="px-1.5 py-px rounded-full border border-cardline">
+                <Text className="text-[8px] font-semibold text-oncard-muted">
                   {t("dish.estimated")}
                 </Text>
               </View>
             ) : null}
             {branch?.isOpen ? (
-              <Text className="text-[8px] leading-[10px] font-bold text-emerald-600 uppercase">
+              <Text className="text-[8px] leading-[10px] font-bold text-success-ink uppercase">
                 {t("card.openNow")}
               </Text>
             ) : null}
           </View>
 
           {reason ? (
-            <Text numberOfLines={3} className="text-[11px] leading-[15px] text-brand-700">
+            <Text numberOfLines={3} className="text-[11px] leading-[15px] text-oncard-tag">
               {reason}
             </Text>
           ) : null}
 
           {onFeedback ? (
             <View className="flex-row items-center gap-1.5 pt-1">
-              <Text className="text-[9px] text-cream-faint flex-1">{t("card.fitYourMood")}</Text>
+              <Text className="text-[9px] text-oncard-muted flex-1">{t("card.fitYourMood")}</Text>
               <Pressable
                 onPress={(event) => {
                   event.stopPropagation();

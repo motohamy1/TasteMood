@@ -49,45 +49,45 @@ export function FeaturedCard({ dish, rank }: Props) {
         <View className="flex-1 p-3 gap-1 justify-center">
           <Text
             numberOfLines={1}
-            className="text-[13px] font-bold text-night"
+            className="text-[13px] font-bold text-oncard"
           >
             {name}
           </Text>
-          <Text numberOfLines={1} className="text-[10px] text-cream-faint">
+          <Text numberOfLines={1} className="text-[10px] text-oncard-muted">
             {displayName(lang, { name: dish.restaurantName, nameEn: dish.restaurantNameEn })}
             {dish.branchName ? ` · ${dish.branchName}` : ""}
           </Text>
 
           {typeof dish.rating === "number" ? (
             <View className="flex-row items-center gap-1">
-              <Text className="text-[11px] text-brand-500">★</Text>
-              <Text className="text-[11px] font-semibold text-stone-600">
+              <Text className="text-[11px] text-oncard-price">★</Text>
+              <Text className="text-[11px] font-semibold text-oncard">
                 {dish.rating.toFixed(1)}
                 {dish.reviewCount && dish.reviewCount > 0
                   ? ` (${dish.reviewCount})`
                   : ""}
               </Text>
-              <Text className="text-[10px] text-cream-faint">· {dish.cuisine}</Text>
+              <Text className="text-[10px] text-oncard-muted">· {dish.cuisine}</Text>
             </View>
           ) : (
-            <Text className="text-[10px] text-cream-faint">{dish.cuisine}</Text>
+            <Text className="text-[10px] text-oncard-muted">{dish.cuisine}</Text>
           )}
 
           <View className="flex-row items-center justify-between mt-0.5">
-            <Text className="text-[13px] font-extrabold text-brand-600">
+            <Text className="text-[13px] font-extrabold text-oncard-price">
               {formatPrice(dish.price, dish.currency)}
             </Text>
             <View className="flex-row items-center gap-1">
               {isEstimated ? (
-                <View className="px-1.5 py-px rounded-full border border-ink-700">
-                  <Text className="text-[8px] font-semibold text-cream-mute">
+                <View className="px-1.5 py-px rounded-full border border-cardline">
+                  <Text className="text-[8px] font-semibold text-oncard-muted">
                     {t("dish.estimated")}
                   </Text>
                 </View>
               ) : null}
               {dish.tasteAttributes.length > 0 ? (
-                <View className="px-1.5 py-px rounded-full border border-brand-100">
-                  <Text className="text-[9px] text-brand-700 font-semibold">
+                <View className="px-1.5 py-px rounded-full border border-clay-100">
+                  <Text className="text-[9px] text-oncard-tag font-semibold">
                     {dish.tasteAttributes[0].toLowerCase()}
                   </Text>
                 </View>

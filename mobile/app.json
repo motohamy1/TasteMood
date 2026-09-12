@@ -5,6 +5,11 @@
     "scheme": "tastemood",
     "version": "1.0.0",
     "orientation": "portrait",
+    "androidStatusBar": {
+      "backgroundColor": "#100706",
+      "barStyle": "light-content",
+      "translucent": true
+    },
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,

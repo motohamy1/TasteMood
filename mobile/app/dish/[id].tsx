@@ -112,7 +112,7 @@ export default function DishDetailsScreen() {
         </Text>
         <Pressable
           onPress={() => refetch()}
-          className="mt-4 px-4 py-2 rounded-full bg-brand-500"
+          className="mt-4 px-4 py-2 rounded-full bg-brand-cta"
         >
           <Text className="text-night text-sm font-bold">{t("common.retry")}</Text>
         </Pressable>
@@ -148,7 +148,7 @@ export default function DishDetailsScreen() {
             <Pressable
               onPress={toggleSave}
               hitSlop={8}
-              className="w-8 h-8 rounded-full bg-brand-500 items-center justify-center"
+              className="w-8 h-8 rounded-full bg-brand-cta items-center justify-center"
             >
               <Text className="text-[14px] text-night">
                 {isSaved ? "♥" : "♡"}
@@ -157,7 +157,7 @@ export default function DishDetailsScreen() {
           ) : (
             <Link href="/auth" asChild>
               <Pressable hitSlop={8} className="px-2 py-1">
-                <Text className="text-[11px] text-brand-500 font-bold">
+                <Text className="text-[11px] text-accent font-bold">
                   {t("common.signIn")}
                 </Text>
               </Pressable>
@@ -194,7 +194,7 @@ export default function DishDetailsScreen() {
               {dish.cuisine ? ` · ${dish.cuisine}` : ""}
             </Text>
             <View className="flex-row items-center gap-2 mt-1">
-              <Text className="text-xl font-extrabold text-brand-500">
+              <Text className="text-xl font-extrabold text-accent">
                 {formatPrice(dish.price, dish.currency)}
               </Text>
               {dish.verificationStatus === "UNVERIFIED" ? (
@@ -241,9 +241,9 @@ export default function DishDetailsScreen() {
                 {dish.dietaryProperties.map((tag) => (
                   <View
                     key={tag}
-                    className="bg-emerald-900 px-2.5 py-1 rounded-full"
+                    className="bg-success-bg px-2.5 py-1 rounded-full"
                   >
-                    <Text className="text-[11px] font-semibold text-emerald-50 uppercase">
+                    <Text className="text-[11px] font-semibold text-cream uppercase">
                       {tag.toLowerCase().replace(/_/g, " ")}
                     </Text>
                   </View>
@@ -257,7 +257,7 @@ export default function DishDetailsScreen() {
                 {dish.ingredients.map((ing) => (
                   <View
                     key={ing}
-                    className="bg-stone-800 px-2.5 py-1 rounded-full"
+                    className="bg-neutral-chip px-2.5 py-1 rounded-full"
                   >
                     <Text className="text-[11px] text-cream">{ing}</Text>
                   </View>
@@ -268,10 +268,10 @@ export default function DishDetailsScreen() {
 
           {dish.aiExplanation ? (
             <View className="bg-brand-50 border border-brand-100 rounded-[14px] p-2.5 gap-0.5">
-              <Text className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-600">
+              <Text className="text-[10px] font-bold uppercase tracking-[0.08em] text-oncard-price">
                 {t("dish.whyThisDish")}
               </Text>
-              <Text className="text-xs text-brand-900 leading-4">
+              <Text className="text-xs text-oncard leading-4">
                 {dish.aiExplanation}
               </Text>
             </View>
@@ -303,7 +303,7 @@ export default function DishDetailsScreen() {
                 onPress={toggleSave}
                 className={cn(
                   "flex-1 rounded-xl items-center justify-center p-2",
-                  isSaved ? "bg-ink-700" : "bg-brand-500"
+                  isSaved ? "bg-ink-700" : "bg-brand-cta"
                 )}
               >
                 <Text
@@ -320,7 +320,7 @@ export default function DishDetailsScreen() {
 
           {/* Customize panel */}
           <View className="gap-2.5">
-            <Text className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-500">
+            <Text className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">
               {t("dish.customize")}
             </Text>
 
@@ -340,7 +340,7 @@ export default function DishDetailsScreen() {
                 </Text>
                 <Pressable
                   onPress={() => setPortion((p) => Math.min(9, p + 1))}
-                  className="w-7 h-7 rounded-full bg-brand-500 items-center justify-center active:opacity-85"
+                  className="w-7 h-7 rounded-full bg-brand-cta items-center justify-center active:opacity-85"
                 >
                   <Text className="text-sm text-night font-bold">+</Text>
                 </Pressable>
@@ -361,7 +361,7 @@ export default function DishDetailsScreen() {
                       className={cn(
                         "flex-1 py-1.5 rounded-full items-center border",
                         active
-                          ? "bg-brand-500 border-brand-500"
+                          ? "bg-brand-cta border-brand-cta"
                           : "border-ink-700"
                       )}
                     >

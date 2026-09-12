@@ -3,9 +3,10 @@ import { Link } from "expo-router";
 import { Pressable } from "react-native";
 
 import { tabIcon } from "@/components/tab-icons";
+import { COLORS } from "@/lib/theme";
 
 /** Soft single-layer amber halo — matches the Paper header button. */
-const PROFILE_BUTTON_GLOW = "0 2px 14px rgba(219, 147, 56, 0.27)";
+const PROFILE_BUTTON_GLOW = "0 2px 14px rgba(221, 150, 58, 0.27)";
 
 /**
  * Amber profile shortcut shown in the top-right of every tab screen's
@@ -22,7 +23,7 @@ export function ProfileButton() {
         hitSlop={8}
       >
         <Image
-          source={tabIcon("profile", "#431407", 22)}
+          source={tabIcon("profile", COLORS.onAmber, 22)}
           style={{ width: 22, height: 22 }}
         />
       </Pressable>
