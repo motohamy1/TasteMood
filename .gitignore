@@ -60,6 +60,9 @@ prisma/*.db-journal
 /commandcode
 commandcode/
 .commandcode/taste/
+.commandcode/taste/taste/taste.md
+/.commandcode/taste/taste
+.commandcode/taste/workflow
 
 graphify-out
 graphify-out/
@@ -70,3 +73,12 @@ dakahlia_comprehensive_food_data.csv
 .commandcode/taste/taste/taste.md
 .commandcode/taste/taste/taste.md
 .commandcode/taste/taste/taste.md
+
+
+.continue/
+
+docs
+.scratch
+dakahlia_comprehensive_food_data
+dakahlia_all_18_markaz_exhaustive_data.csv
+dakahlia_menus_photos.csv

@@ -5,6 +5,7 @@ import { requireRole } from '../../middleware/role.middleware.js';
 import { validate } from '../../middleware/validation.middleware.js';
 import {
   CreateRestaurantSchema,
+  QueryRestaurantCitySchema,
   QueryRestaurantSchema,
   UpdateRestaurantSchema,
 } from './schema.js';
@@ -15,6 +16,13 @@ router.get(
   '/',
   validate({ query: QueryRestaurantSchema }),
   (req, res, next) => restaurantController.getRestaurants(req, res, next)
+);
+
+// Must stay above `/:id`, otherwise "cities" is parsed as a restaurant id.
+router.get(
+  '/cities',
+  validate({ query: QueryRestaurantCitySchema }),
+  (req, res, next) => restaurantController.getRestaurantCities(req, res, next)
 );
 
 router.get('/slug/:slug', (req, res, next) =>

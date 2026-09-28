@@ -24,6 +24,9 @@ Factual AI Explanation (Anti-hallucination strictly bounded by database facts)
 Final Recommendation Response
 ```
 
+Recommendations return up to the requested result limit, but only from active dish records in the database. With `nearestFirst` and coordinates, they return distinct dishes ordered by closest branch. An active menu listing is not live stock confirmation. Place opening status is `true` or `false` only when hours are declared; it is `null` when hours are missing.
+
+
 ---
 
 ## 🚀 Quickstart
@@ -70,7 +73,7 @@ npm test
 | `GET` | `/api/v1/search/dishes` | Structured search for dishes with multi-criteria filters | Public |
 | `GET` | `/api/v1/restaurants` | List restaurants (paginated, cuisine & price filters) | Public |
 | `GET` | `/api/v1/restaurants/:id` | Get restaurant details, branches, and menus | Public |
-| `GET` | `/api/v1/branches` | List branches with live open status & distance | Public |
+| `GET` | `/api/v1/branches` | List branches with opening status (unknown when hours are absent) and distance | Public |
 | `GET` | `/api/v1/branches/:id` | Get branch details & operating hours | Public |
 | `GET` | `/api/v1/menus/:id` | Get menu with structured dishes | Public |
 | `GET` | `/api/v1/dishes/:id` | Get dish details, taste profile, and price history | Public |

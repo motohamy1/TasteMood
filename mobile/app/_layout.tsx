@@ -67,13 +67,9 @@ export default function RootLayout() {
             <Stack.Screen
               name="dishes"
               options={{
-                headerShown: true,
-                title: "All dishes",
-                headerBackTitle: "Back",
+                headerShown: false,
                 presentation: "card",
-                headerStyle: { backgroundColor: COLORS.ink950 },
-                headerTintColor: COLORS.cream,
-                headerTitleStyle: { color: COLORS.cream, fontWeight: "700" },
+                contentStyle: { backgroundColor: "#0A0A0A" },
               }}
             />
             <Stack.Screen
@@ -90,6 +86,13 @@ export default function RootLayout() {
             />
             <Stack.Screen
               name="dish/[id]"
+              options={{
+                headerShown: false,
+                presentation: "card",
+              }}
+            />
+            <Stack.Screen
+              name="restaurant/[id]"
               options={{
                 headerShown: false,
                 presentation: "card",

@@ -18,6 +18,8 @@ function buildDishWhere(params: QueryDishInput): Prisma.DishWhereInput {
     restaurantId,
     categoryId,
     cuisine,
+    city,
+    governorate,
     minPrice,
     maxPrice,
     search,
@@ -27,10 +29,49 @@ function buildDishWhere(params: QueryDishInput): Prisma.DishWhereInput {
     tag,
   } = params;
 
+  // Every relation filter that reaches through the dish's menu shares this one
+  // `menu` key — separate spreads would let a later filter overwrite an earlier
+  // one (`?cuisine=…&city=…` would silently drop the cuisine).
+  const menuWhere: Prisma.MenuWhereInput = {
+    ...(restaurantId ? { restaurantId } : {}),
+    ...(cuisine || city || governorate
+      ? {
+          restaurant: {
+            ...(cuisine
+              ? {
+                  cuisines: {
+                    some: {
+                      cuisine: {
+                        OR: [
+                          { name: { contains: cuisine, mode: 'insensitive' } },
+                          { slug: { contains: cuisine, mode: 'insensitive' } },
+                        ],
+                      },
+                    },
+                  },
+                }
+              : {}),
+            // Location filters match a restaurant with an ACTIVE branch there.
+            ...(city || governorate
+              ? {
+                  branches: {
+                    some: {
+                      status: 'ACTIVE',
+                      ...(city ? { city: { slug: city } } : {}),
+                      ...(governorate ? { governorate: { slug: governorate } } : {}),
+                    },
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
+  };
+
   return {
     status: 'ACTIVE',
     ...(menuId ? { menuId } : {}),
-    ...(restaurantId ? { menu: { restaurantId } } : {}),
+    ...(Object.keys(menuWhere).length > 0 ? { menu: menuWhere } : {}),
     ...(minPrice !== undefined || maxPrice !== undefined
       ? {
           price: {
@@ -51,24 +92,6 @@ function buildDishWhere(params: QueryDishInput): Prisma.DishWhereInput {
       ? {
           categories: {
             some: { categoryId },
-          },
-        }
-      : {}),
-    ...(cuisine
-      ? {
-          menu: {
-            restaurant: {
-              cuisines: {
-                some: {
-                  cuisine: {
-                    OR: [
-                      { name: { contains: cuisine, mode: 'insensitive' } },
-                      { slug: { contains: cuisine, mode: 'insensitive' } },
-                    ],
-                  },
-                },
-              },
-            },
           },
         }
       : {}),

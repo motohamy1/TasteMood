@@ -18,11 +18,20 @@ import {
   getDishes,
   getMyPreferences,
   getRecommendations,
+  getRestaurant,
+  getRestaurantAreas,
+  getRestaurants,
   updateMyPreferences,
   type CuisineOption,
 } from "./api";
 import type { DishSummary } from "@/types/dish";
 import type { RecommendationRequest } from "@/types/recommendation";
+import type {
+  RestaurantArea,
+  RestaurantDetail,
+  RestaurantQuery,
+  RestaurantSummary,
+} from "@/types/restaurant";
 import type { UserPreferences } from "@/types/user";
 import { useAuthStore, selectIsSignedIn } from "@/lib/auth-store";
 
@@ -33,6 +42,10 @@ export const queryKeys = {
   cuisines: ["cuisines"] as const,
   recommendations: (req: RecommendationRequest) =>
     ["recommendations", req] as const,
+  restaurants: (params: RestaurantQuery = {}) =>
+    ["restaurants", params] as const,
+  restaurantAreas: ["restaurants", "areas"] as const,
+  restaurant: (id: string) => ["restaurant", id] as const,
   preferences: ["preferences", "me"] as const,
 };
 
@@ -44,6 +57,8 @@ interface DishListParams {
   categoryId?: string;
   minPrice?: number;
   maxPrice?: number;
+  city?: string;
+  governorate?: string;
 }
 
 export function useDishes(
@@ -86,6 +101,41 @@ export function useRecommendations(payload: RecommendationRequest | null) {
     queryFn: () => getRecommendations(payload as RecommendationRequest),
     enabled: payload != null,
     staleTime: 5 * 60_000,
+  });
+}
+
+// ----- Places (restaurant catalogue) --------------------------------------
+
+export function useRestaurants(
+  params: RestaurantQuery = {},
+  options?: Omit<
+    UseQueryOptions<RestaurantSummary[], Error>,
+    "queryKey" | "queryFn"
+  >
+) {
+  return useQuery({
+    queryKey: queryKeys.restaurants(params),
+    queryFn: () => getRestaurants(params),
+    staleTime: 5 * 60_000,
+    ...options,
+  });
+}
+
+/** Markaz/area options for the Location category rail (with counts). */
+export function useRestaurantAreas() {
+  return useQuery({
+    queryKey: queryKeys.restaurantAreas,
+    queryFn: () => getRestaurantAreas(),
+    staleTime: 30 * 60_000,
+  });
+}
+
+export function useRestaurant(id: string | undefined) {
+  return useQuery({
+    queryKey: id ? queryKeys.restaurant(id) : (["restaurant", "unknown"] as const),
+    queryFn: () => getRestaurant(id as string),
+    enabled: !!id,
+    staleTime: 60_000,
   });
 }
 

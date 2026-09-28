@@ -58,6 +58,6 @@ export function buildRecommendationRequest(
   return {
     query: trimmedQuery || (activeMood !== null ? MOODS[activeMood].query : undefined),
     maxPrice,
-    limit: 6,
+    limit: 12,
   };
 }

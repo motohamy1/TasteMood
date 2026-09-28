@@ -228,9 +228,9 @@ export function buildPersonalityRequest({
             ? 800
             : undefined,
     ...(latitude != null && longitude != null
-      ? { lat: latitude, lng: longitude, radiusKm }
+      ? { lat: latitude, lng: longitude, radiusKm, nearestFirst: true }
       : {}),
     surpriseMe: discoveryPreference === "CURIOUS" || mood === "adventurous",
-    limit: 8,
+    limit: 12,
   };
 }

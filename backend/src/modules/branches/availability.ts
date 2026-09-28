@@ -20,7 +20,7 @@ export interface BranchLike {
 }
 
 export interface BranchAvailability {
-  isOpen: boolean;
+  isOpen: boolean | null;
   distanceKm?: number;
 }
 
@@ -30,14 +30,14 @@ export interface ClosestBranchSummary {
 }
 
 /**
- * Evaluates whether a branch is currently open based on day-of-week and
- * 24h open/close times. A branch with no declared hours defaults to open.
+ * Evaluates current opening status from declared operating hours. Missing
+ * hours are unknown, not evidence that the branch is open.
  */
 export function isBranchOpenAt(
   hours: OperatingHoursLike[] | null | undefined,
   now: Date = new Date()
-): boolean {
-  if (!hours || hours.length === 0) return true;
+): boolean | null {
+  if (!hours || hours.length === 0) return null;
 
   const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
   const currentHour = now.getHours();

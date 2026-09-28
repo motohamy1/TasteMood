@@ -21,6 +21,7 @@ export interface RecommendationRequest {
   lat?: number;
   lng?: number;
   radiusKm?: number;
+  nearestFirst?: boolean;
   surpriseMe?: boolean;
   limit?: number;
 }
@@ -31,6 +32,8 @@ export interface RecommendationDish {
   nameEn?: string | null;
   description: string | null;
   descriptionEn?: string | null;
+  category?: string | null;
+  cuisine?: string | null;
   price: number;
   currency: string;
   imageUrl: string | null;
@@ -54,10 +57,10 @@ export interface RecommendationRestaurant {
 export interface RecommendationBranch {
   id: string;
   name: string;
-  address: string;
+  address: string | null;
   latitude: number;
   longitude: number;
-  isOpen: boolean;
+  isOpen: boolean | null;
 }
 
 export interface RecommendationScoreBreakdown {

@@ -9,7 +9,7 @@ export class BranchService {
    * Evaluates if branch is currently open based on day-of-week and 24h open/close times.
    * Delegates to the shared geo-availability module.
    */
-  isBranchOpen(hours: BranchOperatingHour[], now: Date = new Date()): boolean {
+  isBranchOpen(hours: BranchOperatingHour[], now: Date = new Date()): boolean | null {
     return isBranchOpenAt(hours, now);
   }
 
@@ -39,7 +39,7 @@ export class BranchService {
     }
 
     if (params.openNow) {
-      result = result.filter((b) => b.isOpen);
+      result = result.filter((b) => b.isOpen === true);
     }
 
     return result;

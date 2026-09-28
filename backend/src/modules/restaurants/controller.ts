@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { restaurantService } from './service.js';
-import { QueryRestaurantInput } from './schema.js';
+import { QueryRestaurantCityInput, QueryRestaurantInput } from './schema.js';
 
 export class RestaurantController {
   async getRestaurants(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await restaurantService.getRestaurants(req.query as unknown as QueryRestaurantInput);
+      const result = await restaurantService.getRestaurants(
+        req.query as unknown as QueryRestaurantInput
+      );
       res.json({
         success: true,
         data: result.items,
@@ -16,6 +18,17 @@ export class RestaurantController {
           totalPages: result.totalPages,
         },
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getRestaurantCities(req: Request, res: Response, next: NextFunction) {
+    try {
+      const areas = await restaurantService.getRestaurantCities(
+        req.query as unknown as QueryRestaurantCityInput
+      );
+      res.json({ success: true, data: areas });
     } catch (error) {
       next(error);
     }

@@ -15,6 +15,12 @@ import type {
   RecommendationResponse,
 } from "@/types/recommendation";
 import type { InteractionType } from "@/types/interaction";
+import type {
+  RestaurantArea,
+  RestaurantDetail,
+  RestaurantQuery,
+  RestaurantSummary,
+} from "@/types/restaurant";
 import type { UserPreferences, UserProfile } from "@/types/user";
 
 const DEFAULT_BASE_URL = "http://localhost:5000/api/v1";
@@ -147,6 +153,10 @@ export function getDishes(params: {
   categoryId?: string;
   minPrice?: number;
   maxPrice?: number;
+  /** City.slug — dishes whose restaurant has an active branch there. */
+  city?: string;
+  /** Governorate.slug — same, one level up. */
+  governorate?: string;
 } = {}) {
   return request<DishSummary[]>("/dishes", { query: params });
 }
@@ -164,6 +174,26 @@ export interface CuisineOption {
 
 export function getCuisines() {
   return request<CuisineOption[]>("/dishes/cuisines");
+}
+
+// ----- Restaurants / places ----------------------------------------------
+
+/**
+ * List places. Same envelope-unwrapping note as getDishes: resolves to a plain
+ * array; `meta` (pagination) is dropped. Passing latitude+longitude switches the
+ * backend to distance-aware mode (distanceMeters + optional radiusKm filter).
+ */
+export function getRestaurants(params: RestaurantQuery = {}) {
+  return request<RestaurantSummary[]>("/restaurants", { query: params });
+}
+
+/** Areas (markaz) that have at least one restaurant, with counts + centres. */
+export function getRestaurantAreas(params: { governorate?: string } = {}) {
+  return request<RestaurantArea[]>("/restaurants/cities", { query: params });
+}
+
+export function getRestaurant(id: string) {
+  return request<RestaurantDetail>(`/restaurants/${encodeURIComponent(id)}`);
 }
 
 export function getRecommendations(payload: RecommendationRequest) {

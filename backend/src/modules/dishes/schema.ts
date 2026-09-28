@@ -62,6 +62,10 @@ export const QueryDishSchema = z.object({
   restaurantId: z.string().uuid().optional(),
   categoryId: z.string().optional(),
   cuisine: z.string().optional(),
+  /** Match restaurants that have an ACTIVE branch in this city (City.slug). */
+  city: z.string().optional(),
+  /** Match restaurants that have an ACTIVE branch in this governorate (Governorate.slug). */
+  governorate: z.string().optional(),
   minPrice: z.coerce.number().optional(),
   maxPrice: z.coerce.number().optional(),
   search: z.string().optional(),

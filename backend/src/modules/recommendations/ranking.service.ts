@@ -65,6 +65,32 @@ export interface ScoredCandidate<DishT extends RankableDish = RankableDish>
   };
 }
 
+/** Sort nearest-first when requested, keep one closest branch per dish, and cap the result. */
+export function selectRankedCandidates<DishT extends RankableDish>(
+  candidates: ScoredCandidate<DishT>[],
+  limit: number,
+  nearestFirst = false
+): ScoredCandidate<DishT>[] {
+  candidates.sort((a, b) => {
+    if (nearestFirst) {
+      const distanceA = a.distanceKm ?? Number.POSITIVE_INFINITY;
+      const distanceB = b.distanceKm ?? Number.POSITIVE_INFINITY;
+      if (distanceA !== distanceB) return distanceA - distanceB;
+    }
+    return b.score - a.score;
+  });
+
+  const selected: ScoredCandidate<DishT>[] = [];
+  const seenDishIds = new Set<string>();
+  for (const candidate of candidates) {
+    if (seenDishIds.has(candidate.dish.id)) continue;
+    seenDishIds.add(candidate.dish.id);
+    selected.push(candidate);
+    if (selected.length >= limit) break;
+  }
+  return selected;
+}
+
 export class RankingService {
   /**
    * Scores a candidate based on configurable weights and deterministic scoring rules.

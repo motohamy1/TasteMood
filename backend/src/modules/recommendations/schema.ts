@@ -14,6 +14,7 @@ export const RecommendationRequestSchema = z.object({
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
   radiusKm: z.number().positive().default(10),
+  nearestFirst: z.boolean().default(false),
   surpriseMe: z.boolean().default(false),
   limit: z.number().min(1).max(20).default(5),
 });
@@ -54,7 +55,7 @@ export const RecommendationItemSchema = z.object({
     address: z.string().nullable(),
     latitude: z.number(),
     longitude: z.number(),
-    isOpen: z.boolean(),
+    isOpen: z.boolean().nullable(),
   }),
   distanceMeters: z.number().nullable(),
   score: z.number(),

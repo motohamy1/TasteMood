@@ -1,7 +1,7 @@
 import { RecommendationRequestInput, RecommendationResponseSchema } from './schema.js';
 import { intentService } from '../../ai/intent/intent.service.js';
 import { explanationService } from '../../ai/explanation/explanation.service.js';
-import { CandidateInput, rankingService, ScoredCandidate } from './ranking.service.js';
+import { CandidateInput, rankingService, ScoredCandidate, selectRankedCandidates } from './ranking.service.js';
 import { dishRepository } from '../dishes/repository.js';
 import { presentDish } from '../dishes/presenter.js';
 import { evaluateBranch } from '../branches/availability.js';
@@ -49,11 +49,12 @@ export class RecommendationService {
     // 4. Fan out to branches, applying geo + exclusion filters in memory
     const candidates = this.#buildCandidatePool(dishes, intent, now);
 
-    // 5. Score, rank, and keep the top K
-    const topCandidates = candidates
-      .map((candidate) => rankingService.scoreCandidate(candidate, intent, userProfile))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, input.limit);
+    // 5. Rank the closest distinct dishes for browse mode; otherwise use taste score.
+    const topCandidates = selectRankedCandidates(
+      candidates.map((candidate) => rankingService.scoreCandidate(candidate, intent, userProfile)),
+      input.limit,
+      input.nearestFirst && Boolean(intent.location)
+    );
 
     // 6. Explain the winners (single degrade policy lives at the AI seam)
     const facts = this.#buildFacts(topCandidates);

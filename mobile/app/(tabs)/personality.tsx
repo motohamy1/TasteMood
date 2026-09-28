@@ -35,11 +35,14 @@ import {
 } from "@/lib/personality";
 import {
   emptyPersonalitySession,
+  applyTasteVectorDelta,
   readPersonalitySession,
   todayKey,
   writePersonalitySession,
   type PersonalitySession,
+  type TasteVector,
 } from "@/lib/personality-session";
+import { orderByLearnedAffinity } from "@/lib/personality-ranking";
 import { RecommendationCard } from "@/components/recommendation-card";
 import { ProfileButton } from "@/components/profile-button";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
@@ -303,8 +306,13 @@ export default function PersonalityScreen() {
   useEffect(() => {
     let active = true;
     if (!isSignedIn) {
-      setSession(emptyPersonalitySession());
-      setSessionReady(true);
+      // Guests get the full loop too: their vector lives under the "guest"
+      // scope and survives restarts and the daily reset.
+      void readPersonalitySession().then((stored) => {
+        if (!active) return;
+        setSession(stored);
+        setSessionReady(true);
+      });
       return () => {
         active = false;
       };
@@ -364,10 +372,10 @@ export default function PersonalityScreen() {
     : false;
 
   const recommendation = useRecommendations(submitted);
-  const picks = useMemo(
-    () => dedupe(recommendation.data?.recommendations ?? []).slice(0, 8),
-    [recommendation.data]
-  );
+  const picks = useMemo(() => {
+    const base = dedupe(recommendation.data?.recommendations ?? []).slice(0, 8);
+    return isSignedIn ? base : orderByLearnedAffinity(base, session.tasteVector);
+  }, [recommendation.data, isSignedIn, session.tasteVector]);
   const avgMatch = useMemo(() => {
     if (!picks.length) return null;
     const raw = picks.reduce((sum, item) => sum + (item.score ?? 0), 0) / picks.length;
@@ -383,7 +391,7 @@ export default function PersonalityScreen() {
 
   function persistSession(next: PersonalitySession) {
     setSession(next);
-    if (isSignedIn) void writePersonalitySession(next, user?.id);
+    void writePersonalitySession(next, isSignedIn ? user?.id : undefined);
   }
 
   function patchSession(patch: Partial<PersonalitySession>) {
@@ -410,6 +418,23 @@ export default function PersonalityScreen() {
         delete next[item.dish.id];
         return next;
       });
+    });
+  }
+
+  const guestFeedbackDelta: Record<FeedbackType, number> = {
+    LIKE: 1,
+    DISLIKE: -1,
+    NOT_INTERESTED: 0,
+  };
+
+  function guestFeedback(item: RecommendationItem, type: FeedbackType) {
+    setFeedback((current) => ({ ...current, [item.dish.id]: type }));
+    patchSession({
+      tasteVector: applyTasteVectorDelta(
+        session.tasteVector,
+        item,
+        guestFeedbackDelta[type]
+      ),
     });
   }
 
@@ -473,15 +498,17 @@ export default function PersonalityScreen() {
   useEffect(() => {
     const id = setInterval(() => {
       if (todayKey() === session.dateKey) return;
-      const next = emptyPersonalitySession();
+      // Daily reset clears mood/weather/time context but carries the learned
+      // taste vector forward — signals do not expire with the day.
+      const next = { ...emptyPersonalitySession(), tasteVector: session.tasteVector };
       setSession(next);
       setSubmitted(null);
       setApplied(null);
       setFreeText("");
-      if (isSignedIn) void writePersonalitySession(next, user?.id);
+      void writePersonalitySession(next, isSignedIn ? user?.id : undefined);
     }, 30_000);
     return () => clearInterval(id);
-  }, [isSignedIn, session.dateKey, user?.id]);
+  }, [isSignedIn, session.dateKey, session.tasteVector, user?.id]);
 
   return (
     <View className="flex-1 bg-ink-950 overflow-hidden">
@@ -530,7 +557,7 @@ export default function PersonalityScreen() {
             setRadiusKm={setRadiusKm}
             onIgnoreWeather={() => patchSession({ weatherEnabled: false })}
             feedback={feedback}
-            onFeedback={isSignedIn ? sendFeedback : undefined}
+            onFeedback={isSignedIn ? sendFeedback : guestFeedback}
           />
 
           <View className="px-4">
