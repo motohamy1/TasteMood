@@ -1,13 +1,16 @@
-import type { RecommendationItem } from "@/types/recommendation";
-import type { TasteVector } from "@/lib/personality-session";
+import type { RecommendationItem, PersonalityContext } from "@/types/recommendation";
+import type {
+  PersonalityContextTasteVector,
+  TasteVector,
+} from "@/lib/personality-session";
 
-/**
- * Guest-side ranking fold (mirrors ADR-001 §2 in spirit): per-dimension
- * affinity is net/5 clamped to [-1, +1]; each candidate's combined affinity is
- * the average of its dimensions' affinities. Deterministic, same input =
- * same order; ties keep the server order.
- */
 const AFFINITY_SCALE = 5;
+const LEARNED_INFLUENCE_CAP = 0.3;
+
+export interface LearnedTasteProfile {
+  tasteVector: TasteVector;
+  contextTasteVector?: PersonalityContextTasteVector;
+}
 
 export function dimensionAffinity(net: number): number {
   return Math.max(-1, Math.min(1, net / AFFINITY_SCALE));
@@ -37,17 +40,57 @@ export function pickAffinity(
   return count === 0 ? 0 : sum / count;
 }
 
+function contextualVectors(
+  vectors: PersonalityContextTasteVector | undefined,
+  context: PersonalityContext | undefined
+): TasteVector[] {
+  if (!vectors || !context) return [];
+  const matching: TasteVector[] = [];
+  if (context.weather) {
+    const vector = vectors.weather[context.weather];
+    if (vector) matching.push(vector);
+  }
+  if (context.mealSlot) {
+    const vector = vectors.mealSlot[context.mealSlot];
+    if (vector) matching.push(vector);
+  }
+  if (context.mood) {
+    const vector = vectors.mood[context.mood];
+    if (vector) matching.push(vector);
+  }
+  return matching;
+}
+
+export function learnedPickAffinity(
+  item: Pick<RecommendationItem, "dish" | "restaurant">,
+  learned: LearnedTasteProfile,
+  context?: PersonalityContext
+): number {
+  const affinities = [pickAffinity(learned.tasteVector, item)];
+  for (const vector of contextualVectors(learned.contextTasteVector, context)) {
+    affinities.push(pickAffinity(vector, item));
+  }
+  return affinities.reduce((sum, affinity) => sum + affinity, 0) / affinities.length;
+}
+
 /**
- * Stable sort of candidates by learned affinity, descending. Server order is
- * the tiebreak: equal affinities never swap, so the baseline ranking still
- * shows through for untouched candidates.
+ * Stable guest-side ranking blend. Learned affinity contributes at most ±0.3
+ * to the existing score; the server's order remains the deterministic tiebreak.
  */
 export function orderByLearnedAffinity<T extends RecommendationItem>(
   items: readonly T[],
-  vector: TasteVector
+  learned: TasteVector | LearnedTasteProfile,
+  context?: PersonalityContext
 ): T[] {
+  const profile: LearnedTasteProfile = "tasteVector" in learned
+    ? learned
+    : { tasteVector: learned };
   return items
-    .map((item, index) => ({ item, index, affinity: pickAffinity(vector, item) }))
-    .sort((a, b) => b.affinity - a.affinity || a.index - b.index)
+    .map((item, index) => ({
+      item,
+      index,
+      score: (item.score ?? 0) + learnedPickAffinity(item, profile, context) * LEARNED_INFLUENCE_CAP,
+    }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((entry) => entry.item);
 }

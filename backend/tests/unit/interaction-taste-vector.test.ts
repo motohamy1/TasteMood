@@ -135,4 +135,50 @@ describe('InteractionService taste-vector write-back', () => {
     expect(vector?.tasteAttribute ?? {}).toEqual({});
     expect(vector?.mealCharacteristic ?? {}).toEqual({});
   });
+  it('SAVED updates global and matching context vectors and stores context provenance', async () => {
+    dishFindById.mockResolvedValue(makeDish());
+    const personalityContext = { weather: 'hot', mealSlot: 'dinner', mood: 'cozy' };
+
+    await interactionService.recordInteraction(USER_ID, {
+      dishId: DISH_ID,
+      interactionType: 'SAVED',
+      metadata: { source: 'personality' },
+      personalityContext,
+    });
+
+    expect(interactionCreate).toHaveBeenCalledWith(USER_ID, {
+      dishId: DISH_ID,
+      interactionType: 'SAVED',
+      metadata: { source: 'personality', personalityContext },
+    });
+    const inferred = inferredOf();
+    const global = inferred.tasteVector as Record<string, Record<string, number>>;
+    expect(global.cuisine.Egyptian).toBe(1);
+    expect(global.tasteAttribute.SPICY).toBe(1);
+    expect(global.mealCharacteristic.SNACK).toBe(1);
+
+    const contextual = inferred.contextTasteVector as Record<string, Record<string, Record<string, Record<string, number>>>>;
+    for (const factor of ['weather', 'mealSlot', 'mood']) {
+      const value = personalityContext[factor as keyof typeof personalityContext];
+      const vector = contextual[factor][value];
+      expect(vector.cuisine.Egyptian).toBe(1);
+      expect(vector.tasteAttribute.SPICY).toBe(1);
+      expect(vector.mealCharacteristic.SNACK).toBe(1);
+    }
+  });
+
+  it('does not enrich taste vectors for views or clicks', async () => {
+    for (const interactionType of ['VIEW_DISH', 'CLICK_RECOMMENDATION'] as const) {
+      await interactionService.recordInteraction(USER_ID, {
+        dishId: DISH_ID,
+        interactionType,
+        personalityContext: { weather: 'hot' },
+      });
+    }
+
+    expect(profileFindByUserId).not.toHaveBeenCalled();
+    expect(profileUpsert).not.toHaveBeenCalled();
+    expect(dishFindById).not.toHaveBeenCalled();
+    expect(interactionCreate).toHaveBeenCalledTimes(2);
+  });
 });

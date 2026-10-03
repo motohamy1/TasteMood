@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { DietaryPropertyEnum, MealCharacteristicEnum, TasteAttributeEnum } from '../dishes/schema.js';
+import { PersonalityContextSchema } from '../personality/personality-context.js';
 
 export const RecommendationRequestSchema = z.object({
   query: z.string().optional(), // Natural language request: e.g. "I want something spicy under 250 EGP near me"
+  personalityContext: PersonalityContextSchema.optional(),
   maxPrice: z.number().positive().optional(),
   minPrice: z.number().positive().optional(),
   cuisines: z.array(z.string()).optional(),
@@ -61,6 +63,7 @@ export const RecommendationItemSchema = z.object({
   score: z.number(),
   scoreBreakdown: z.object({
     preferenceMatch: z.number(),
+    learnedAffinity: z.number(),
     priceMatch: z.number(),
     distanceScore: z.number(),
     tasteMatch: z.number(),

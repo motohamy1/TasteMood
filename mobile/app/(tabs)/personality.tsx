@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -39,14 +39,25 @@ import {
   type WeatherCondition,
 } from "@/lib/personality";
 import {
+  applyPersonalitySignal,
   emptyPersonalitySession,
-  applyTasteVectorDelta,
   readPersonalitySession,
   todayKey,
   writePersonalitySession,
   type PersonalitySession,
-  type TasteVector,
 } from "@/lib/personality-session";
+import {
+  completeUserPreferences,
+  coreAnswerPatch,
+  emptyGuestPersonalityProfile,
+  mergeGuestPersonalityProfile,
+  missingCoreFacets,
+  nextCoreQuestionId,
+  shouldGateCoreQuiz,
+  type CoreQuestionId,
+  type GuestPersonalityProfile,
+} from "@/lib/personality-profile";
+import { useGuestProfileStore } from "@/lib/guest-profile-store";
 import { nearestArea } from "@/lib/browse-groups";
 import { orderByLearnedAffinity } from "@/lib/personality-ranking";
 import { RecommendationCard } from "@/components/recommendation-card";
@@ -58,8 +69,12 @@ import { cn } from "@/lib/cn";
 import { COLORS } from "@/lib/theme";
 import { pickLabel, useLang, useT } from "@/i18n";
 import { recordInteraction } from "@/lib/api";
-import type { RecommendationItem, RecommendationRequest } from "@/types/recommendation";
-import type { DietaryProperty } from "@/types/dish";
+import type {
+  PersonalityContext,
+  RecommendationItem,
+  RecommendationRequest,
+} from "@/types/recommendation";
+import type { DietaryProperty, MealCharacteristic } from "@/types/dish";
 import type { UserPreferences } from "@/types/user";
 import type { InteractionType } from "@/types/interaction";
 import type { TranslationKey } from "@/i18n/dictionaries";
@@ -72,6 +87,10 @@ const DIETARY_OPTIONS: Array<{
   { labelKey: "personality.vegetarian", value: ["VEGETARIAN"] },
   { labelKey: "personality.vegan", value: ["VEGAN"] },
   { labelKey: "personality.halal", value: ["HALAL"] },
+  { labelKey: "personality.glutenFree", value: ["GLUTEN_FREE"] },
+  { labelKey: "personality.dairyFree", value: ["DAIRY_FREE"] },
+  { labelKey: "personality.nutFree", value: ["NUT_FREE"] },
+  { labelKey: "personality.lowCarb", value: ["LOW_CARB"] },
 ];
 
 const SPICE_OPTIONS: Array<{ value: number; labelKey: TranslationKey }> = [
@@ -83,18 +102,34 @@ const SPICE_OPTIONS: Array<{ value: number; labelKey: TranslationKey }> = [
   { value: 5, labelKey: "personality.spice5" },
 ];
 
+const MEAL_TYPE_OPTIONS: Array<{ value: MealCharacteristic; labelKey: TranslationKey }> = [
+  { value: "BREAKFAST", labelKey: "personality.slotBreakfast" },
+  { value: "LUNCH", labelKey: "personality.slotLunch" },
+  { value: "DINNER", labelKey: "personality.slotDinner" },
+  { value: "SNACK", labelKey: "personality.slotLateNight" },
+];
+
+const CORE_QUESTION_COPY: Record<CoreQuestionId, TranslationKey> = {
+  dietary: "personality.coreDietary",
+  cuisine: "personality.coreCuisine",
+  mealType: "personality.coreMealType",
+  spice: "personality.coreSpice",
+  discovery: "personality.coreDiscovery",
+};
+
 const PROFILE_STATUS_LABEL: Record<ProfileCompleteness, TranslationKey> = {
   NOT_STARTED: "personality.statusNotStarted",
   IN_PROGRESS: "personality.statusInProgress",
   READY: "personality.statusReady",
 };
 
-const SETUP_STEP_LABELS: TranslationKey[] = [
-  "personality.stepTaste",
-  "personality.stepDietary",
-  "personality.stepHeat",
-  "personality.stepDiscovery",
-];
+const FOLLOW_UP_LABEL: Record<CoreQuestionId, TranslationKey> = {
+  dietary: "personality.stepDietary",
+  cuisine: "personality.stepTaste",
+  mealType: "personality.stepMeals",
+  spice: "personality.stepHeat",
+  discovery: "personality.stepDiscovery",
+};
 
 interface AppliedSnapshot {
   profile: string;
@@ -163,14 +198,145 @@ function TraitBar({ label, pct }: { label: string; pct: number }) {
   );
 }
 
-function firstIncompleteSetupStep(prefs?: UserPreferences | null): number {
-  if (!prefs) return 0;
-  const metadata = getPersonalityMetadata(prefs);
-  if (!prefs.preferredCuisines.length) return 0;
-  if (!metadata.dietaryConfirmed && !prefs.dietaryRestrictions.length) return 1;
-  if (!metadata.spiceConfirmed && prefs.spicePreference === 2) return 2;
-  if (!metadata.discoveryPreference) return 3;
-  return 0;
+function CoreQuiz({
+  question,
+  step,
+  dietaryDraft,
+  onDietaryDraft,
+  onAnswer,
+  saving,
+  error,
+}: {
+  question: CoreQuestionId;
+  step: number;
+  dietaryDraft: DietaryProperty[];
+  onDietaryDraft: (next: DietaryProperty[]) => void;
+  onAnswer: (value: string) => void;
+  saving: boolean;
+  error: string | null;
+}) {
+  const t = useT();
+  const lang = useLang();
+
+  function toggleDietary(tag: DietaryProperty) {
+    onDietaryDraft(
+      dietaryDraft.includes(tag)
+        ? dietaryDraft.filter((value) => value !== tag)
+        : [...dietaryDraft, tag]
+    );
+  }
+
+  return (
+    <View className="px-4">
+      <View className="bg-wine border border-wine-deep rounded-2xl p-3.5 gap-3">
+        <View className="gap-1">
+          <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.12em] text-accent uppercase">
+            {t("personality.coreProgress", { step, total: 5 })}
+          </Text>
+          <Text className="text-[14px] leading-[19px] font-bold text-cream">
+            {t(CORE_QUESTION_COPY[question])}
+          </Text>
+        </View>
+
+        {question === "dietary" ? (
+          <>
+            <View className="flex-row flex-wrap gap-1.5">
+              <ToggleChip
+                label={t("personality.noRestrictions")}
+                active={dietaryDraft.length === 0}
+                onPress={() => onDietaryDraft([])}
+              />
+              {DIETARY_OPTIONS.filter((option) => option.value.length > 0).map((option) => (
+                <ToggleChip
+                  key={option.labelKey}
+                  label={t(option.labelKey)}
+                  active={dietaryDraft.includes(option.value[0])}
+                  onPress={() => toggleDietary(option.value[0])}
+                />
+              ))}
+            </View>
+            <Pressable
+              onPress={() => onAnswer(dietaryDraft.length ? dietaryDraft.join(",") : "NONE")}
+              className="bg-brand-cta rounded-full py-2.5 items-center active:opacity-80"
+            >
+              <Text className="text-xs font-bold text-night">{t("personality.coreContinue")}</Text>
+            </Pressable>
+          </>
+        ) : null}
+
+        {question === "cuisine" ? (
+          <View className="flex-row flex-wrap gap-1.5">
+            {CUISINE_OPTIONS.map((cuisine) => (
+              <ToggleChip
+                key={cuisine}
+                label={cuisine}
+                active={false}
+                onPress={() => onAnswer(cuisine)}
+              />
+            ))}
+            <ToggleChip
+              label={t("personality.coreDepends")}
+              active={false}
+              onPress={() => onAnswer("NONE")}
+            />
+          </View>
+        ) : null}
+
+        {question === "mealType" ? (
+          <View className="flex-row flex-wrap gap-1.5">
+            {MEAL_TYPE_OPTIONS.map((option) => (
+              <ToggleChip
+                key={option.value}
+                label={t(option.labelKey)}
+                active={false}
+                onPress={() => onAnswer(option.value)}
+              />
+            ))}
+            <ToggleChip
+              label={t("personality.coreDepends")}
+              active={false}
+              onPress={() => onAnswer("NONE")}
+            />
+          </View>
+        ) : null}
+
+        {question === "spice" ? (
+          <View className="flex-row flex-wrap gap-1.5">
+            {SPICE_OPTIONS.map((option) => (
+              <ToggleChip
+                key={option.value}
+                label={t(option.labelKey)}
+                active={false}
+                onPress={() => onAnswer(String(option.value))}
+              />
+            ))}
+          </View>
+        ) : null}
+
+        {question === "discovery" ? (
+          <View className="gap-1.5">
+            {DISCOVERY_OPTIONS.map((option) => (
+              <Pressable
+                key={option.value}
+                onPress={() => onAnswer(option.value)}
+                className="bg-ink-950 border border-ink-700 rounded-xl px-3 py-2 active:opacity-80"
+              >
+                <Text className="text-xs font-semibold text-cream">
+                  {pickLabel(lang, option.label, option.labelAr)}
+                </Text>
+                <Text className="text-[10px] text-cream-mute">
+                  {pickLabel(lang, option.description, option.descriptionAr)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        {saving ? <ActivityIndicator color={COLORS.amber} /> : null}
+        {error ? <Text className="text-[10px] font-semibold text-danger">{error}</Text> : null}
+      </View>
+    </View>
+  );
 }
 
 type FeedbackType = Extract<InteractionType, "LIKE" | "DISLIKE" | "NOT_INTERESTED">;
@@ -275,17 +441,29 @@ export default function PersonalityScreen() {
   const live = useLiveContext();
   const [session, setSession] = useState<PersonalitySession>(emptyPersonalitySession);
   const [sessionReady, setSessionReady] = useState(false);
+  const guestProfile = useGuestProfileStore((state) => state.profile);
+  const guestProfileReady = useGuestProfileStore((state) => state.hydrated);
+  const hydrateGuestProfile = useGuestProfileStore((state) => state.hydrate);
+  const persistGuestProfile = useGuestProfileStore((state) => state.persist);
+  const resetGuestProfile = useGuestProfileStore((state) => state.reset);
   const [profileDraft, setProfileDraft] = useState<UserPreferences | null>(null);
   const [submitted, setSubmitted] = useState<RecommendationRequest | null>(null);
   const [applied, setApplied] = useState<AppliedSnapshot | null>(null);
   const [freeText, setFreeText] = useState("");
   const [radiusKm, setRadiusKm] = useState(10);
-  const [setupStep, setSetupStep] = useState(0);
   const [savingSetup, setSavingSetup] = useState(false);
   const [setupError, setSetupError] = useState<string | null>(null);
+  const [dietaryDraft, setDietaryDraft] = useState<DietaryProperty[]>([]);
   const [feedback, setFeedback] = useState<Record<string, InteractionType>>({});
+  const mergeAttempted = useRef(false);
 
-  const effectivePrefs = profileDraft ?? prefs;
+  const guestPreferences = guestProfile
+    ? completeUserPreferences(guestProfile.preferences)
+    : null;
+  const effectivePrefs: UserPreferences | null | undefined = isSignedIn
+    ? profileDraft ?? prefs
+    : guestPreferences;
+  const prefsReady = isSignedIn ? !!effectivePrefs : guestProfileReady;
   const profileStatus = getProfileCompleteness(effectivePrefs);
   const metadata = getPersonalityMetadata(effectivePrefs);
   const discoveryPreference: DiscoveryPreference = metadata.discoveryPreference ?? "FAMILIAR";
@@ -295,6 +473,32 @@ export default function PersonalityScreen() {
   const mealSlot = session.timeEnabled
     ? session.mealSlotOverride ?? clock.slot
     : null;
+  const context: PersonalityContext = {
+    ...(weather ? { weather } : {}),
+    ...(mealSlot ? { mealSlot } : {}),
+    ...(session.mood ? { mood: session.mood } : {}),
+  };
+  const coreAnswers = isSignedIn
+    ? metadata.coreAnswers ?? {}
+    : guestProfile?.coreAnswers ?? {};
+  const coreQuestion = nextCoreQuestionId(coreAnswers);
+  const coreStarted = Object.keys(coreAnswers).length > 0;
+  const showCoreQuiz =
+    prefsReady &&
+    coreQuestion !== null &&
+    (coreStarted ||
+      shouldGateCoreQuiz(isSignedIn ? effectivePrefs : null, isSignedIn ? null : guestProfile));
+  const followUpFacets = useMemo(
+    () => (showCoreQuiz ? [] : missingCoreFacets(effectivePrefs)),
+    [showCoreQuiz, effectivePrefs]
+  );
+  const followUpQuestion = followUpFacets[0] ?? null;
+  const showFollowUp =
+    prefsReady &&
+    !showCoreQuiz &&
+    followUpQuestion !== null &&
+    sessionReady &&
+    session.followUpShownDate !== todayKey();
 
   useEffect(() => {
     setSessionReady(false);
@@ -304,43 +508,36 @@ export default function PersonalityScreen() {
     setFreeText("");
     setRadiusKm(10);
     setFeedback({});
+    setDietaryDraft([]);
+    mergeAttempted.current = false;
   }, [isSignedIn, user?.id]);
 
   useEffect(() => {
     if (prefs) setProfileDraft(prefs);
   }, [prefs]);
 
+  // The guest profile is process-wide state; hydrate it once per app run.
+  useEffect(() => {
+    if (!guestProfileReady) void hydrateGuestProfile();
+  }, [guestProfileReady, hydrateGuestProfile]);
+
   useEffect(() => {
     let active = true;
-    if (!isSignedIn) {
-      // Guests get the full loop too: their vector lives under the "guest"
-      // scope and survives restarts and the daily reset.
-      void readPersonalitySession().then((stored) => {
-        if (!active) return;
-        setSession(stored);
-        setSessionReady(true);
-      });
-      return () => {
-        active = false;
-      };
-    }
-
-    void readPersonalitySession(user?.id).then((stored) => {
+    // Guests get the full loop too: their vector lives under the "guest"
+    // scope and survives restarts and the daily reset.
+    void readPersonalitySession(isSignedIn ? user?.id : undefined).then((stored) => {
       if (!active) return;
       setSession(stored);
       setSessionReady(true);
     });
-
     return () => {
       active = false;
     };
   }, [isSignedIn, user?.id]);
 
   useEffect(() => {
-    if (profileStatus !== "READY") {
-      setSetupStep((current) => Math.max(current, firstIncompleteSetupStep(effectivePrefs)));
-    }
-  }, [effectivePrefs, profileStatus]);
+    if (effectivePrefs) setDietaryDraft(effectivePrefs.dietaryRestrictions);
+  }, [effectivePrefs]);
 
   function currentSnapshot(nextPrefs = effectivePrefs): AppliedSnapshot {
     return {
@@ -372,22 +569,39 @@ export default function PersonalityScreen() {
     });
   }
 
-  useEffect(() => {
-    if (!sessionReady || live.loading || (isSignedIn && loadingPrefs) || submitted) return;
-    const request = requestFor();
+  function submitRequest(request: RecommendationRequest) {
     setSubmitted(request);
     setApplied(currentSnapshot());
-  }, [sessionReady, live.loading, isSignedIn, loadingPrefs, submitted]);
+    // Remember the live context so an explicit save from Dish Details records
+    // the same context this session's picks were shaped by.
+    void writePersonalitySession(
+      { ...session, lastContext: request.personalityContext ?? null },
+      isSignedIn ? user?.id : undefined
+    );
+  }
+
+  useEffect(() => {
+    if (!sessionReady || !guestProfileReady || live.loading || (isSignedIn && loadingPrefs) || submitted) {
+      return;
+    }
+    if (showCoreQuiz) return;
+    submitRequest(requestFor());
+  }, [sessionReady, guestProfileReady, live.loading, isSignedIn, loadingPrefs, submitted, showCoreQuiz]);
 
   const isDirty = applied
     ? JSON.stringify(applied) !== JSON.stringify(currentSnapshot())
     : false;
 
-  const recommendation = useRecommendations(submitted);
+  const recommendation = useRecommendations(showCoreQuiz ? null : submitted);
   const picks = useMemo(() => {
     const base = dedupe(recommendation.data?.recommendations ?? []).slice(0, 8);
-    return isSignedIn ? base : orderByLearnedAffinity(base, session.tasteVector);
-  }, [recommendation.data, isSignedIn, session.tasteVector]);
+    return isSignedIn
+      ? base
+      : orderByLearnedAffinity(base, {
+          tasteVector: session.tasteVector,
+          contextTasteVector: session.contextTasteVector,
+        }, context);
+  }, [recommendation.data, isSignedIn, session.tasteVector, session.contextTasteVector, context]);
   const avgMatch = useMemo(() => {
     if (!picks.length) return null;
     const raw = picks.reduce((sum, item) => sum + (item.score ?? 0), 0) / picks.length;
@@ -411,9 +625,7 @@ export default function PersonalityScreen() {
   }
 
   function updatePicks() {
-    const request = requestFor();
-    setSubmitted(request);
-    setApplied(currentSnapshot());
+    submitRequest(requestFor());
   }
 
   function sendFeedback(item: RecommendationItem, type: InteractionType) {
@@ -424,6 +636,7 @@ export default function PersonalityScreen() {
       restaurantId: item.restaurant.id,
       branchId: item.branch.id,
       interactionType: type,
+      ...(Object.keys(context).length > 0 ? { personalityContext: context } : {}),
     }).catch(() => {
       setFeedback((current) => {
         const next = { ...current };
@@ -441,63 +654,150 @@ export default function PersonalityScreen() {
 
   function guestFeedback(item: RecommendationItem, type: FeedbackType) {
     setFeedback((current) => ({ ...current, [item.dish.id]: type }));
-    patchSession({
-      tasteVector: applyTasteVectorDelta(
-        session.tasteVector,
-        item,
-        guestFeedbackDelta[type]
-      ),
-    });
+    persistSession(applyPersonalitySignal(session, item, guestFeedbackDelta[type], context));
   }
 
   async function saveStablePreference(
     patch: Partial<UserPreferences>,
-    personalityPatch: Record<string, unknown>
+    personalityPatch: Record<string, unknown>,
+    submit = true
   ) {
     if (!effectivePrefs) return null;
-    const currentInferred = effectivePrefs.inferredPreferences ?? {};
-    const nextInferred = {
-      ...currentInferred,
-      personality: {
-        ...getPersonalityMetadata(effectivePrefs),
-        ...personalityPatch,
-      },
-    };
     const next = await updatePrefs.mutateAsync({
       ...patch,
-      inferredPreferences: nextInferred,
+      inferredPreferences: {
+        ...(effectivePrefs.inferredPreferences ?? {}),
+        personality: {
+          ...getPersonalityMetadata(effectivePrefs),
+          ...personalityPatch,
+        },
+      },
     });
     setProfileDraft(next);
-    const request = requestFor(next);
-    setSubmitted(request);
-    setApplied(currentSnapshot(next));
+    if (submit) submitRequest(requestFor(next));
     return next;
   }
 
-  async function answerSetup(value: string | number | DietaryProperty[]) {
+  async function answerCore(question: CoreQuestionId, value: string) {
     if (savingSetup || !effectivePrefs) return;
     setSavingSetup(true);
     setSetupError(null);
     try {
-      if (setupStep === 0 && typeof value === "string") {
-        await saveStablePreference({ preferredCuisines: [value] }, {});
-      } else if (setupStep === 1 && Array.isArray(value)) {
-        await saveStablePreference(
-          { dietaryRestrictions: value },
-          { dietaryConfirmed: true }
-        );
-      } else if (setupStep === 2 && typeof value === "number") {
-        await saveStablePreference({ spicePreference: value }, { spiceConfirmed: true });
-      } else if (setupStep === 3 && typeof value === "string") {
-        await saveStablePreference({}, { discoveryPreference: value });
+      const nextAnswers = { ...coreAnswers, [question]: value };
+      const complete = nextCoreQuestionId(nextAnswers) === null;
+      const { patch, meta } = coreAnswerPatch(question, value);
+      const personalityPatch = {
+        ...meta,
+        coreAnswers: nextAnswers,
+        ...(complete ? { coreCompleted: true } : {}),
+      };
+      if (isSignedIn) {
+        await saveStablePreference(patch, personalityPatch, false);
+      } else {
+        const profile = guestProfile ?? emptyGuestPersonalityProfile();
+        const nextProfile: GuestPersonalityProfile = {
+          ...profile,
+          preferences: {
+            ...profile.preferences,
+            ...patch,
+            inferredPreferences: {
+              ...(profile.preferences.inferredPreferences ?? {}),
+              personality: {
+                ...getPersonalityMetadata(profile.preferences),
+                ...personalityPatch,
+              },
+            },
+          },
+          coreAnswers: nextAnswers,
+          coreCompleted: complete || profile.coreCompleted,
+        };
+        await persistGuestProfile(nextProfile);
       }
-      setSetupStep((step) => Math.min(3, step + 1));
     } catch (error) {
-      setSetupError(error instanceof Error ? error.message : "Could not save that answer.");
+      setSetupError(error instanceof Error ? error.message : t("personality.answerSaveFailed"));
     } finally {
       setSavingSetup(false);
     }
   }
+
+  async function answerFollowUp(question: CoreQuestionId, value: string) {
+    if (savingSetup || !effectivePrefs) return;
+    setSavingSetup(true);
+    setSetupError(null);
+    try {
+      const { patch, meta } = coreAnswerPatch(question, value);
+      const personalityPatch = {
+        ...meta,
+        coreAnswers: { ...coreAnswers, [question]: value },
+        followUpShownDate: todayKey(),
+      };
+      if (isSignedIn) {
+        await saveStablePreference(patch, personalityPatch, false);
+      } else {
+        const profile = guestProfile ?? emptyGuestPersonalityProfile();
+        const nextProfile: GuestPersonalityProfile = {
+          ...profile,
+          preferences: {
+            ...profile.preferences,
+            ...patch,
+            inferredPreferences: {
+              ...(profile.preferences.inferredPreferences ?? {}),
+              personality: {
+                ...getPersonalityMetadata(profile.preferences),
+                ...personalityPatch,
+              },
+            },
+          },
+          coreAnswers: { ...profile.coreAnswers, [question]: value },
+          followUpShownDate: todayKey(),
+        };
+        await persistGuestProfile(nextProfile);
+      }
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : t("personality.answerSaveFailed"));
+    } finally {
+      setSavingSetup(false);
+    }
+  }
+
+  function dismissFollowUp() {
+    patchSession({ followUpShownDate: todayKey() });
+    if (!isSignedIn && guestProfile) {
+      void persistGuestProfile({ ...guestProfile, followUpShownDate: todayKey() });
+    } else if (isSignedIn && effectivePrefs) {
+      void saveStablePreference({}, { followUpShownDate: todayKey() }, false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isSignedIn || !guestProfileReady || !guestProfile || !effectivePrefs) return;
+    if (mergeAttempted.current) return;
+    const hasGuestData =
+      guestProfile.coreCompleted ||
+      Object.keys(guestProfile.coreAnswers).length > 0 ||
+      Object.keys(guestProfile.preferences).length > 0;
+    const hasGuestSignals =
+      Object.keys(session.tasteVector.cuisine).length > 0 ||
+      Object.keys(session.tasteVector.tasteAttribute).length > 0 ||
+      Object.keys(session.tasteVector.mealCharacteristic).length > 0 ||
+      Object.keys(session.contextTasteVector.weather).length > 0 ||
+      Object.keys(session.contextTasteVector.mealSlot).length > 0 ||
+      Object.keys(session.contextTasteVector.mood).length > 0;
+    if (!hasGuestData && !hasGuestSignals) return;
+    mergeAttempted.current = true;
+    void (async () => {
+      try {
+        const merge = mergeGuestPersonalityProfile(effectivePrefs, guestProfile, session);
+        if (merge.alreadyMerged) return;
+        const next = await updatePrefs.mutateAsync(merge.update);
+        setProfileDraft(next);
+        await resetGuestProfile();
+        await writePersonalitySession(emptyPersonalitySession(), undefined);
+      } catch {
+        // Guest merge is best-effort; the local profile stays intact on failure.
+      }
+    })();
+  }, [isSignedIn, guestProfileReady, guestProfile, effectivePrefs, session, updatePrefs]);
 
   const spice = effectivePrefs?.spicePreference ?? 0;
   const cuisines = effectivePrefs?.preferredCuisines ?? [];
@@ -506,13 +806,20 @@ export default function PersonalityScreen() {
   const timeLabel = mealSlot
     ? pickLabel(lang, SLOT_LABELS[mealSlot].word, SLOT_LABELS[mealSlot].labelAr)
     : t("personality.timeNotShaping");
+  const tasteSummary = cuisines.length
+    ? cuisines.slice(0, 3).join(" · ")
+    : t("personality.noCuisinesYet");
 
   useEffect(() => {
     const id = setInterval(() => {
       if (todayKey() === session.dateKey) return;
-      // Daily reset clears mood/weather/time context but carries the learned
-      // taste vector forward — signals do not expire with the day.
-      const next = { ...emptyPersonalitySession(), tasteVector: session.tasteVector };
+      // Daily reset clears mood/weather/time context but carries learned
+      // signals forward — signals do not expire with the day.
+      const next = {
+        ...emptyPersonalitySession(),
+        tasteVector: session.tasteVector,
+        contextTasteVector: session.contextTasteVector,
+      };
       setSession(next);
       setSubmitted(null);
       setApplied(null);
@@ -520,7 +827,13 @@ export default function PersonalityScreen() {
       void writePersonalitySession(next, isSignedIn ? user?.id : undefined);
     }, 30_000);
     return () => clearInterval(id);
-  }, [isSignedIn, session.dateKey, session.tasteVector, user?.id]);
+  }, [
+    isSignedIn,
+    session.dateKey,
+    session.tasteVector,
+    session.contextTasteVector,
+    user?.id,
+  ]);
 
   return (
     <View className="flex-1 bg-ink-950 overflow-hidden">
@@ -552,215 +865,279 @@ export default function PersonalityScreen() {
                 {t("personality.title")}
               </Text>
               <Text className="text-[13px] leading-[16px] text-cream-mute">
-                {t("personality.subtitle")}
+                {showCoreQuiz ? t("personality.coreSubtitle") : t("personality.subtitle")}
               </Text>
             </View>
             <ProfileButton />
           </View>
 
-          <RecommendationResults
-            isLoading={recommendation.isLoading}
-            isError={recommendation.isError}
-            error={recommendation.error as Error | null}
-            refetch={recommendation.refetch}
-            picks={picks}
-            weather={weather}
-            radiusKm={radiusKm}
-            setRadiusKm={setRadiusKm}
-            onIgnoreWeather={() => patchSession({ weatherEnabled: false })}
-            feedback={feedback}
-            onFeedback={isSignedIn ? sendFeedback : guestFeedback}
-          />
-
-          <View className="px-4">
-            <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-3">
-              <View className="flex-row items-center gap-2.5">
-                <View className="w-[38px] h-[38px] rounded-[10px] bg-wine-deep items-center justify-center">
-                  <Text className="text-[18px] leading-[22px]">🌶️</Text>
-                </View>
-                <View className="flex-1 gap-0.5">
-                  <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.12em] text-accent uppercase">
-                    {loadingPrefs && isSignedIn
-                      ? t("personality.readingProfile")
-                      : t(archetypeKey(spice, cuisines.length))}
-                  </Text>
-                  <Text className="text-[11px] leading-[14px] text-cream-mute">
-                    {avgMatch !== null
-                      ? t("personality.matchWithSession", { pct: avgMatch })
-                      : t(PROFILE_STATUS_LABEL[profileStatus])}
-                  </Text>
-                </View>
-                <Link href="/profile" asChild>
-                  <Pressable hitSlop={8}>
-                    <Text className="text-[11px] leading-[14px] font-semibold text-accent">{t("common.edit")}</Text>
-                  </Pressable>
-                </Link>
-              </View>
-              <TraitBar label={t("personality.heat")} pct={spice * 20} />
-              <TraitBar label={t("personality.adventure")} pct={cuisines.length * 25 + (discoveryPreference === "CURIOUS" ? 25 : 0)} />
-              {!isSignedIn ? (
-                <Link href="/auth" asChild>
-                  <Pressable hitSlop={4}>
-                    <Text className="text-[11px] leading-[14px] font-semibold text-accent">
-                      {t("personality.signInToSave")}
-                    </Text>
-                  </Pressable>
-                </Link>
-              ) : null}
-            </View>
-          </View>
-
-          {isSignedIn && profileStatus !== "READY" ? (
-            <View className="px-4">
-              <View className="bg-wine border border-wine-deep rounded-2xl p-3.5 gap-3">
-                <View className="gap-1">
-                  <Text className="text-[13px] font-bold text-cream">
-                    {profileStatus === "NOT_STARTED" ? t("personality.getToKnow") : t("personality.keepShaping")}
-                  </Text>
-                  <Text className="text-[11px] leading-[15px] text-cream-mute">
-                    {t("personality.setupHint", { part: t(SETUP_STEP_LABELS[setupStep]) })}
-                  </Text>
-                </View>
-                {setupStep === 0 ? (
-                  <View className="flex-row flex-wrap gap-1.5">
-                    {CUISINE_OPTIONS.map((cuisine) => (
-                      <ToggleChip key={cuisine} label={cuisine} active={cuisines.includes(cuisine)} onPress={() => void answerSetup(cuisine)} />
-                    ))}
-                  </View>
-                ) : null}
-                {setupStep === 1 ? (
-                  <View className="flex-row flex-wrap gap-1.5">
-                    {DIETARY_OPTIONS.map((option) => (
-                      <ToggleChip key={option.labelKey} label={t(option.labelKey)} active={false} onPress={() => void answerSetup(option.value)} />
-                    ))}
-                  </View>
-                ) : null}
-                {setupStep === 2 ? (
-                  <View className="flex-row flex-wrap gap-1.5">
-                    {SPICE_OPTIONS.map((option) => (
-                      <ToggleChip key={option.value} label={t(option.labelKey)} active={spice === option.value} onPress={() => void answerSetup(option.value)} />
-                    ))}
-                  </View>
-                ) : null}
-                {setupStep === 3 ? (
-                  <View className="gap-1.5">
-                    {DISCOVERY_OPTIONS.map((option) => (
-                      <Pressable key={option.value} onPress={() => void answerSetup(option.value)} className="bg-ink-950 border border-ink-700 rounded-xl px-3 py-2 active:opacity-80">
-                        <Text className="text-xs font-semibold text-cream">{pickLabel(lang, option.label, option.labelAr)}</Text>
-                        <Text className="text-[10px] text-cream-mute">{pickLabel(lang, option.description, option.descriptionAr)}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : null}
-                {savingSetup ? <ActivityIndicator color={COLORS.amber} /> : null}
-                {setupError ? <Text className="text-[10px] font-semibold text-danger">{setupError}</Text> : null}
-              </View>
-            </View>
-          ) : null}
-
-          <View className="px-4 gap-2">
-            <View className="flex-row items-end justify-between">
-              <View className="gap-1 flex-1">
-                <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
-                  {t("personality.tuneTodaysPicks")}
-                </Text>
-                <Text className="text-[13px] leading-[16px] font-bold text-cream">
-                  {t("personality.whatSoundsRight")}
-                </Text>
-              </View>
-              {isDirty ? (
-                <Text className="text-[10px] font-semibold text-accent">{t("personality.changesWaiting")}</Text>
-              ) : null}
-            </View>
-            <View className="flex-row flex-wrap gap-1.5">
-              {PERSONALITY_MOODS.map((option) => (
-                <ToggleChip
-                  key={option.id}
-                  label={`${option.emoji} ${pickLabel(lang, option.label, option.labelAr)}`}
-                  active={session.mood === option.id}
-                  onPress={() => patchSession({ mood: session.mood === option.id ? null : option.id })}
-                />
-              ))}
-            </View>
-            <View className="flex-row items-center gap-2 bg-ink-900 border border-ink-700 rounded-xl px-3 py-1.5">
-              <TextInput
-                value={freeText}
-                onChangeText={setFreeText}
-                placeholder={t("personality.tellAi")}
-                placeholderTextColor={COLORS.mute}
-                className="flex-1 text-[12px] text-cream"
-                returnKeyType="done"
-                onSubmitEditing={updatePicks}
+          {showCoreQuiz && coreQuestion ? (
+            <CoreQuiz
+              question={coreQuestion}
+              step={Object.keys(coreAnswers).length + 1}
+              dietaryDraft={dietaryDraft}
+              onDietaryDraft={setDietaryDraft}
+              onAnswer={(value) => void answerCore(coreQuestion, value)}
+              saving={savingSetup}
+              error={setupError}
+            />
+          ) : (
+            <>
+              <RecommendationResults
+                isLoading={recommendation.isLoading}
+                isError={recommendation.isError}
+                error={recommendation.error as Error | null}
+                refetch={recommendation.refetch}
+                picks={picks}
+                weather={weather}
+                radiusKm={radiusKm}
+                setRadiusKm={setRadiusKm}
+                onIgnoreWeather={() => patchSession({ weatherEnabled: false })}
+                feedback={feedback}
+                onFeedback={isSignedIn ? sendFeedback : guestFeedback}
               />
-              <Pressable onPress={updatePicks} className="bg-brand-cta rounded-full px-3 py-2 active:opacity-80">
-                <Text className="text-[10px] font-bold text-night">{t("common.update")}</Text>
-              </Pressable>
-            </View>
-          </View>
 
-          <View className="px-4 gap-2">
-            <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
-              {t("personality.liveFactors")}
-            </Text>
-            <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3 gap-3">
-              <View className="gap-1.5">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-[11px] font-semibold text-cream">
-                    {weatherOption?.emoji ?? live.emoji ?? "🌤️"} {t("personality.weather")}
-                  </Text>
-                  <Pressable onPress={() => patchSession({ weatherEnabled: !session.weatherEnabled })}>
-                    <Text className="text-[10px] font-semibold text-accent">
-                      {session.weatherEnabled ? t("common.on") : t("common.off")}
-                    </Text>
-                  </Pressable>
-                </View>
-                <Text className="text-[10px] text-cream-mute">
-                  {live.tempC !== null && live.condition ? `${live.tempC}°C · ${live.condition}` : live.unavailable ? t("personality.weatherUnavailable") : t("personality.checkingWeather")}
-                </Text>
-                <View className="flex-row flex-wrap gap-1.5">
-                  {WEATHER_OPTIONS.map((option) => (
-                    <ToggleChip key={option.value} label={`${option.emoji} ${pickLabel(lang, option.label, option.labelAr)}`} active={weather === option.value && session.weatherEnabled} onPress={() => patchSession({ weatherOverride: option.value, weatherEnabled: true })} />
-                  ))}
-                </View>
-              </View>
-              <View className="h-px bg-ink-700" />
-              <View className="gap-1.5">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-[11px] font-semibold text-cream">🕰️ {t("personality.timeSlot")}</Text>
-                  <Pressable onPress={() => patchSession({ timeEnabled: !session.timeEnabled })}>
-                    <Text className="text-[10px] font-semibold text-accent">{session.timeEnabled ? t("common.on") : t("common.off")}</Text>
-                  </Pressable>
-                </View>
-                <Text className="text-[10px] text-cream-mute">
-                  {session.timeEnabled ? `${clock.clock} · ${timeLabel}` : t("personality.timeNotShaping")}
-                </Text>
-                <View className="flex-row flex-wrap gap-1.5">
-                  {(Object.keys(SLOT_LABELS) as PersonalityMealSlot[]).map((slot) => (
-                    <ToggleChip key={slot} label={`${SLOT_LABELS[slot].emoji} ${pickLabel(lang, SLOT_LABELS[slot].word, SLOT_LABELS[slot].labelAr)}`} active={mealSlot === slot && session.timeEnabled} onPress={() => patchSession({ mealSlotOverride: slot, timeEnabled: true })} />
-                  ))}
-                </View>
-              </View>
-              <View className="flex-row flex-wrap gap-1.5">
-                <View className="bg-wine px-2.5 py-1 rounded-full">
-                  <Text className="text-[10px] font-semibold text-cream">📍 {live.city ?? t("personality.locationOff")}{nearestDistance ? ` · ${nearestDistance}` : ""}</Text>
-                </View>
-                <View className="bg-wine px-2.5 py-1 rounded-full">
-                  <Text className="text-[10px] font-semibold text-cream">{discoveryPreference === "CURIOUS" ? t("personality.discoveryOn") : t("personality.familiarFirst")}</Text>
-                </View>
-                {radiusKm > 10 ? (
-                  <View className="bg-wine px-2.5 py-1 rounded-full">
-                    <Text className="text-[10px] font-semibold text-cream">{t("personality.withinKm", { km: radiusKm })}</Text>
+              <View className="px-4">
+                <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-3">
+                  <View className="flex-row items-center gap-2.5">
+                    <View className="w-[38px] h-[38px] rounded-[10px] bg-wine-deep items-center justify-center">
+                      <Text className="text-[18px] leading-[22px]">🌶️</Text>
+                    </View>
+                    <View className="flex-1 gap-0.5">
+                      <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.12em] text-accent uppercase">
+                        {loadingPrefs && isSignedIn
+                          ? t("personality.readingProfile")
+                          : t(archetypeKey(spice, cuisines.length))}
+                      </Text>
+                      <Text className="text-[11px] leading-[14px] text-cream-mute">
+                        {avgMatch !== null
+                          ? t("personality.matchWithSession", { pct: avgMatch })
+                          : t(PROFILE_STATUS_LABEL[profileStatus])}
+                      </Text>
+                    </View>
+                    <Link href="/profile" asChild>
+                      <Pressable hitSlop={8}>
+                        <Text className="text-[11px] leading-[14px] font-semibold text-accent">{t("common.edit")}</Text>
+                      </Pressable>
+                    </Link>
                   </View>
+                  <Text className="text-[11px] leading-[15px] text-cream-mute">
+                    {t("personality.tasteSummary", { cuisines: tasteSummary })}
+                  </Text>
+                  <TraitBar label={t("personality.heat")} pct={spice * 20} />
+                  <TraitBar label={t("personality.adventure")} pct={cuisines.length * 25 + (discoveryPreference === "CURIOUS" ? 25 : 0)} />
+                  {!isSignedIn ? (
+                    <Link href="/auth" asChild>
+                      <Pressable hitSlop={4}>
+                        <Text className="text-[11px] leading-[14px] font-semibold text-accent">
+                          {t("personality.signInToSave")}
+                        </Text>
+                      </Pressable>
+                    </Link>
+                  ) : null}
+                </View>
+              </View>
+
+              {showFollowUp && followUpQuestion ? (
+                <View className="px-4">
+                  <View className="bg-wine border border-wine-deep rounded-2xl p-3.5 gap-3">
+                    <View className="flex-row items-start justify-between gap-2">
+                      <View className="gap-1 flex-1">
+                        <Text className="text-[13px] font-bold text-cream">
+                          {t("personality.followUpTitle")}
+                        </Text>
+                        <Text className="text-[11px] leading-[15px] text-cream-mute">
+                          {t("personality.followUpHint", {
+                            part: t(FOLLOW_UP_LABEL[followUpQuestion]),
+                          })}
+                        </Text>
+                      </View>
+                      <Pressable onPress={dismissFollowUp} hitSlop={8}>
+                        <Text className="text-[10px] font-semibold text-accent">
+                          {t("personality.followUpSkip")}
+                        </Text>
+                      </Pressable>
+                    </View>
+                    <Text className="text-[12px] leading-[16px] font-semibold text-cream">
+                      {t(CORE_QUESTION_COPY[followUpQuestion])}
+                    </Text>
+                    {followUpQuestion === "dietary" ? (
+                      <View className="flex-row flex-wrap gap-1.5">
+                        {DIETARY_OPTIONS.map((option) => (
+                          <ToggleChip
+                            key={option.labelKey}
+                            label={t(option.labelKey)}
+                            active={false}
+                            onPress={() =>
+                              void answerFollowUp(
+                                "dietary",
+                                option.value.length ? option.value.join(",") : "NONE"
+                              )
+                            }
+                          />
+                        ))}
+                      </View>
+                    ) : followUpQuestion === "cuisine" ? (
+                      <View className="flex-row flex-wrap gap-1.5">
+                        {CUISINE_OPTIONS.map((cuisine) => (
+                          <ToggleChip
+                            key={cuisine}
+                            label={cuisine}
+                            active={false}
+                            onPress={() => void answerFollowUp("cuisine", cuisine)}
+                          />
+                        ))}
+                      </View>
+                    ) : followUpQuestion === "mealType" ? (
+                      <View className="flex-row flex-wrap gap-1.5">
+                        {MEAL_TYPE_OPTIONS.map((option) => (
+                          <ToggleChip
+                            key={option.value}
+                            label={t(option.labelKey)}
+                            active={false}
+                            onPress={() => void answerFollowUp("mealType", option.value)}
+                          />
+                        ))}
+                      </View>
+                    ) : followUpQuestion === "spice" ? (
+                      <View className="flex-row flex-wrap gap-1.5">
+                        {SPICE_OPTIONS.map((option) => (
+                          <ToggleChip
+                            key={option.value}
+                            label={t(option.labelKey)}
+                            active={spice === option.value}
+                            onPress={() => void answerFollowUp("spice", String(option.value))}
+                          />
+                        ))}
+                      </View>
+                    ) : (
+                      <View className="gap-1.5">
+                        {DISCOVERY_OPTIONS.map((option) => (
+                          <Pressable
+                            key={option.value}
+                            onPress={() => void answerFollowUp("discovery", option.value)}
+                            className="bg-ink-950 border border-ink-700 rounded-xl px-3 py-2 active:opacity-80"
+                          >
+                            <Text className="text-xs font-semibold text-cream">
+                              {pickLabel(lang, option.label, option.labelAr)}
+                            </Text>
+                            <Text className="text-[10px] text-cream-mute">
+                              {pickLabel(lang, option.description, option.descriptionAr)}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    {savingSetup ? <ActivityIndicator color={COLORS.amber} /> : null}
+                    {setupError ? <Text className="text-[10px] font-semibold text-danger">{setupError}</Text> : null}
+                  </View>
+                </View>
+              ) : null}
+
+              <View className="px-4 gap-2">
+                <View className="flex-row items-end justify-between">
+                  <View className="gap-1 flex-1">
+                    <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
+                      {t("personality.tuneTodaysPicks")}
+                    </Text>
+                    <Text className="text-[13px] leading-[16px] font-bold text-cream">
+                      {t("personality.whatSoundsRight")}
+                    </Text>
+                  </View>
+                  {isDirty ? (
+                    <Text className="text-[10px] font-semibold text-accent">{t("personality.changesWaiting")}</Text>
+                  ) : null}
+                </View>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {PERSONALITY_MOODS.map((option) => (
+                    <ToggleChip
+                      key={option.id}
+                      label={`${option.emoji} ${pickLabel(lang, option.label, option.labelAr)}`}
+                      active={session.mood === option.id}
+                      onPress={() => patchSession({ mood: session.mood === option.id ? null : option.id })}
+                    />
+                  ))}
+                </View>
+                <View className="flex-row items-center gap-2 bg-ink-900 border border-ink-700 rounded-xl px-3 py-1.5">
+                  <TextInput
+                    value={freeText}
+                    onChangeText={setFreeText}
+                    placeholder={t("personality.tellAi")}
+                    placeholderTextColor={COLORS.mute}
+                    className="flex-1 text-[12px] text-cream"
+                    returnKeyType="done"
+                    onSubmitEditing={updatePicks}
+                  />
+                  <Pressable onPress={updatePicks} className="bg-brand-cta rounded-full px-3 py-2 active:opacity-80">
+                    <Text className="text-[10px] font-bold text-night">{t("common.update")}</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              <View className="px-4 gap-2">
+                <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
+                  {t("personality.liveFactors")}
+                </Text>
+                <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3 gap-3">
+                  <View className="gap-1.5">
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-[11px] font-semibold text-cream">
+                        {weatherOption?.emoji ?? live.emoji ?? "🌤️"} {t("personality.weather")}
+                      </Text>
+                      <Pressable onPress={() => patchSession({ weatherEnabled: !session.weatherEnabled })}>
+                        <Text className="text-[10px] font-semibold text-accent">
+                          {session.weatherEnabled ? t("common.on") : t("common.off")}
+                        </Text>
+                      </Pressable>
+                    </View>
+                    <Text className="text-[10px] text-cream-mute">
+                      {live.tempC !== null && live.condition ? `${live.tempC}°C · ${live.condition}` : live.unavailable ? t("personality.weatherUnavailable") : t("personality.checkingWeather")}
+                    </Text>
+                    <View className="flex-row flex-wrap gap-1.5">
+                      {WEATHER_OPTIONS.map((option) => (
+                        <ToggleChip key={option.value} label={`${option.emoji} ${pickLabel(lang, option.label, option.labelAr)}`} active={weather === option.value && session.weatherEnabled} onPress={() => patchSession({ weatherOverride: option.value, weatherEnabled: true })} />
+                      ))}
+                    </View>
+                  </View>
+                  <View className="h-px bg-ink-700" />
+                  <View className="gap-1.5">
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-[11px] font-semibold text-cream">🕰️ {t("personality.timeSlot")}</Text>
+                      <Pressable onPress={() => patchSession({ timeEnabled: !session.timeEnabled })}>
+                        <Text className="text-[10px] font-semibold text-accent">{session.timeEnabled ? t("common.on") : t("common.off")}</Text>
+                      </Pressable>
+                    </View>
+                    <Text className="text-[10px] text-cream-mute">
+                      {session.timeEnabled ? `${clock.clock} · ${timeLabel}` : t("personality.timeNotShaping")}
+                    </Text>
+                    <View className="flex-row flex-wrap gap-1.5">
+                      {(Object.keys(SLOT_LABELS) as PersonalityMealSlot[]).map((slot) => (
+                        <ToggleChip key={slot} label={`${SLOT_LABELS[slot].emoji} ${pickLabel(lang, SLOT_LABELS[slot].word, SLOT_LABELS[slot].labelAr)}`} active={mealSlot === slot && session.timeEnabled} onPress={() => patchSession({ mealSlotOverride: slot, timeEnabled: true })} />
+                      ))}
+                    </View>
+                  </View>
+                  <View className="flex-row flex-wrap gap-1.5">
+                    <View className="bg-wine px-2.5 py-1 rounded-full">
+                      <Text className="text-[10px] font-semibold text-cream">📍 {live.city ?? t("personality.locationOff")}{nearestDistance ? ` · ${nearestDistance}` : ""}</Text>
+                    </View>
+                    <View className="bg-wine px-2.5 py-1 rounded-full">
+                      <Text className="text-[10px] font-semibold text-cream">{discoveryPreference === "CURIOUS" ? t("personality.discoveryOn") : t("personality.familiarFirst")}</Text>
+                    </View>
+                    {radiusKm > 10 ? (
+                      <View className="bg-wine px-2.5 py-1 rounded-full">
+                        <Text className="text-[10px] font-semibold text-cream">{t("personality.withinKm", { km: radiusKm })}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+                {isDirty ? (
+                  <Pressable onPress={updatePicks} className="bg-brand-cta rounded-full py-3 items-center active:opacity-80">
+                    <Text className="text-sm font-bold text-night">{t("personality.updatePicks")}</Text>
+                  </Pressable>
                 ) : null}
               </View>
-            </View>
-            {isDirty ? (
-              <Pressable onPress={updatePicks} className="bg-brand-cta rounded-full py-3 items-center active:opacity-80">
-                <Text className="text-sm font-bold text-night">{t("personality.updatePicks")}</Text>
-              </Pressable>
-            ) : null}
-          </View>
-
+            </>
+          )}
         </View>
       </ScrollView>
     </View>

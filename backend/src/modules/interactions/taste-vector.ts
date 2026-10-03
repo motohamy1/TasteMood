@@ -1,4 +1,5 @@
 import { dishRepository } from '../dishes/repository.js';
+import { z } from 'zod';
 import { CreateInteractionInput } from './schema.js';
 
 export type TasteVector = {
@@ -7,9 +8,8 @@ export type TasteVector = {
   mealCharacteristic: Record<string, number>;
 };
 
-// Taste-vector-relevant interaction types keyed by their net delta:
-// LIKE / SAVED increment (+1), DISLIKE decrements (-1). VIEW/CLICK/SHARED and
-// other non-taste types have no entry and are ignored by the write-back.
+// Explicit feedback updates learned taste vectors. Views and other behavior
+// signals are intentionally absent from this map.
 const DELTA_BY_INTERACTION_TYPE: Partial<Record<CreateInteractionInput['interactionType'], number>> = {
   LIKE: 1,
   SAVED: 1,
@@ -21,17 +21,56 @@ type EnrichedDish = {
   menu?: { restaurant?: { cuisines?: { cuisine?: { name?: string } }[] } } | null;
 };
 
-function emptyTasteVector(): TasteVector {
-  return { cuisine: {}, tasteAttribute: {}, mealCharacteristic: {} };
+const CONTEXT_FACTORS = ['weather', 'mealSlot', 'mood'] as const;
+
+const NumberCountersSchema = z.record(z.number());
+const TasteVectorInputSchema = z
+  .object({
+    cuisine: z.unknown().optional(),
+    tasteAttribute: z.unknown().optional(),
+    mealCharacteristic: z.unknown().optional(),
+  })
+  .passthrough();
+const ContextTasteVectorSchema = z.record(z.record(z.unknown()));
+
+function counterRecord(value: unknown): Record<string, number> {
+  const parsed = NumberCountersSchema.safeParse(value);
+  return parsed.success ? parsed.data : {};
+}
+
+function readTasteVector(value: unknown): TasteVector {
+  const parsed = TasteVectorInputSchema.safeParse(value);
+  const vector = parsed.success ? parsed.data : {};
+  return {
+    cuisine: counterRecord(vector.cuisine),
+    tasteAttribute: counterRecord(vector.tasteAttribute),
+    mealCharacteristic: counterRecord(vector.mealCharacteristic),
+  };
+}
+
+function applyDishDelta(vector: TasteVector, dish: EnrichedDish, delta: number): TasteVector {
+  const cuisine = { ...vector.cuisine };
+  const tasteAttribute = { ...vector.tasteAttribute };
+  const mealCharacteristic = { ...vector.mealCharacteristic };
+
+  for (const restaurantCuisine of dish.menu?.restaurant?.cuisines ?? []) {
+    const name = restaurantCuisine.cuisine?.name;
+    if (name) cuisine[name] = (cuisine[name] ?? 0) + delta;
+  }
+  for (const attribute of dish.attributes?.tasteAttributes ?? []) {
+    tasteAttribute[attribute] = (tasteAttribute[attribute] ?? 0) + delta;
+  }
+  for (const characteristic of dish.attributes?.mealCharacteristics ?? []) {
+    mealCharacteristic[characteristic] = (mealCharacteristic[characteristic] ?? 0) + delta;
+  }
+
+  return { cuisine, tasteAttribute, mealCharacteristic };
 }
 
 /**
- * Mutates `preferences` in place: merges the dish's cuisine / taste-attribute /
- * meal-characteristic net counters into the structured `tasteVector` inside
- * inferredPreferences. `preferences` is the profile's inferredPreferences JSON
- * (already loaded by the caller). Existing keys — including the legacy flat
- * `dish:<id>` counters — are left untouched except the vector dimensions.
- * DISLIKE decrements; nothing is ever removed or filtered.
+ * Mutates `preferences` in place: updates the global taste vector and each
+ * active weather, meal-slot, and mood vector in inferredPreferences. Existing
+ * unrelated preference keys remain untouched.
  */
 export async function applyTasteVector(
   userId: string,
@@ -39,34 +78,28 @@ export async function applyTasteVector(
   preferences: Record<string, unknown>,
 ): Promise<void> {
   const delta = DELTA_BY_INTERACTION_TYPE[input.interactionType];
-  // 0-falsy guard also covers PICKED and any new interaction type: no delta
-  // specified for them yet means no vector write.
   if (!delta || !input.dishId) return;
 
-  // One dish fetch per interaction carries attributes + menu -> restaurant ->
-  // cuisines via dishDetailInclude. Without dishId there is nothing to derive.
   const dish = (await dishRepository.findById(input.dishId)) as unknown as EnrichedDish | null;
   if (!dish) return;
 
-  const existing = preferences.tasteVector;
-  const hasExistingVector =
-    typeof existing === 'object' && existing !== null && typeof (existing as TasteVector).cuisine === 'object';
+  preferences.tasteVector = applyDishDelta(readTasteVector(preferences.tasteVector), dish, delta);
 
-  const vector = hasExistingVector ? (existing as TasteVector) : emptyTasteVector();
-  const cuisine = { ...vector.cuisine };
-  const tasteAttribute = { ...vector.tasteAttribute };
-  const mealCharacteristic = { ...vector.mealCharacteristic };
+  if (!input.personalityContext) return;
+  const existingContexts = ContextTasteVectorSchema.safeParse(preferences.contextTasteVector);
+  const contextTasteVector = existingContexts.success ? { ...existingContexts.data } : {};
+  let hasContextFactor = false;
 
-  for (const rc of dish.menu?.restaurant?.cuisines ?? []) {
-    const name = rc.cuisine?.name;
-    if (name) cuisine[name] = (cuisine[name] ?? 0) + delta;
-  }
-  for (const attr of dish.attributes?.tasteAttributes ?? []) {
-    tasteAttribute[attr] = (tasteAttribute[attr] ?? 0) + delta;
-  }
-  for (const attr of dish.attributes?.mealCharacteristics ?? []) {
-    mealCharacteristic[attr] = (mealCharacteristic[attr] ?? 0) + delta;
+  for (const factor of CONTEXT_FACTORS) {
+    const value = input.personalityContext[factor];
+    if (!value) continue;
+
+    hasContextFactor = true;
+    const existingValues = contextTasteVector[factor] ?? {};
+    const nextValues = { ...existingValues };
+    nextValues[value] = applyDishDelta(readTasteVector(existingValues[value]), dish, delta);
+    contextTasteVector[factor] = nextValues;
   }
 
-  preferences.tasteVector = { cuisine, tasteAttribute, mealCharacteristic };
+  if (hasContextFactor) preferences.contextTasteVector = contextTasteVector;
 }

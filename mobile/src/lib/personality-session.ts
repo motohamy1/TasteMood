@@ -1,7 +1,14 @@
 import * as SecureStore from "expo-secure-store";
 
-import type { RecommendationItem } from "@/types/recommendation";
-import type { PersonalityMealSlot, WeatherCondition } from "@/lib/personality";
+import type {
+  PersonalityContext,
+  PersonalityMealSlot,
+  PersonalityMood,
+  PersonalityWeather,
+  RecommendationItem,
+} from "@/types/recommendation";
+
+import { isRecord } from "@/lib/type-guards";
 
 /**
  * Shared learned-taste vocabulary (mirrors backend interactions/taste-vector.ts):
@@ -13,18 +20,45 @@ export interface TasteVector {
   mealCharacteristic: Record<string, number>;
 }
 
+export interface PersonalityContextTasteVector {
+  weather: Partial<Record<PersonalityWeather, TasteVector>>;
+  mealSlot: Partial<Record<PersonalityMealSlot, TasteVector>>;
+  mood: Partial<Record<PersonalityMood, TasteVector>>;
+}
+
 function storageKey(scope?: string): string {
   return `tastemood.personality.live-context.${scope ?? "guest"}`;
 }
 
 export interface PersonalitySession {
   dateKey: string;
-  mood: string | null;
-  weatherOverride: WeatherCondition | null;
+  mood: PersonalityMood | null;
+  weatherOverride: PersonalityWeather | null;
   weatherEnabled: boolean;
   mealSlotOverride: PersonalityMealSlot | null;
   timeEnabled: boolean;
   tasteVector: TasteVector;
+  contextTasteVector: PersonalityContextTasteVector;
+  followUpShownDate: string | null;
+  lastContext: PersonalityContext | null;
+}
+
+function normalizeContext(value: unknown): PersonalityContext | null {
+  if (!isRecord(value)) return null;
+  const weatherValues: PersonalityWeather[] = ["hot", "dry", "cold", "rainy", "mild"];
+  const mealSlotValues: PersonalityMealSlot[] = ["breakfast", "lunch", "dinner", "late-night"];
+  const moodValues: PersonalityMood[] = ["cozy", "light", "energized", "indulgent", "adventurous", "refreshing"];
+  const context: PersonalityContext = {};
+  if (weatherValues.includes(value.weather as PersonalityWeather)) {
+    context.weather = value.weather as PersonalityWeather;
+  }
+  if (mealSlotValues.includes(value.mealSlot as PersonalityMealSlot)) {
+    context.mealSlot = value.mealSlot as PersonalityMealSlot;
+  }
+  if (moodValues.includes(value.mood as PersonalityMood)) {
+    context.mood = value.mood as PersonalityMood;
+  }
+  return Object.keys(context).length > 0 ? context : null;
 }
 
 export function todayKey(now = new Date()): string {
@@ -38,6 +72,10 @@ export function emptyTasteVector(): TasteVector {
   return { cuisine: {}, tasteAttribute: {}, mealCharacteristic: {} };
 }
 
+export function emptyContextTasteVector(): PersonalityContextTasteVector {
+  return { weather: {}, mealSlot: {}, mood: {} };
+}
+
 export function emptyPersonalitySession(): PersonalitySession {
   return {
     dateKey: todayKey(),
@@ -47,6 +85,9 @@ export function emptyPersonalitySession(): PersonalitySession {
     mealSlotOverride: null,
     timeEnabled: true,
     tasteVector: emptyTasteVector(),
+    contextTasteVector: emptyContextTasteVector(),
+    followUpShownDate: null,
+    lastContext: null,
   };
 }
 
@@ -77,18 +118,53 @@ export function applyTasteVectorDelta(
   return next;
 }
 
-function normalizeTasteVector(value: unknown): TasteVector {
+export function applyPersonalitySignal(
+  session: PersonalitySession,
+  item: Pick<RecommendationItem, "dish" | "restaurant">,
+  delta: number,
+  context: PersonalityContext
+): PersonalitySession {
+  if (delta === 0) return session;
+  const contextTasteVector: PersonalityContextTasteVector = {
+    weather: { ...session.contextTasteVector.weather },
+    mealSlot: { ...session.contextTasteVector.mealSlot },
+    mood: { ...session.contextTasteVector.mood },
+  };
+  if (context.weather) {
+    contextTasteVector.weather[context.weather] = applyTasteVectorDelta(
+      contextTasteVector.weather[context.weather],
+      item,
+      delta
+    );
+  }
+  if (context.mealSlot) {
+    contextTasteVector.mealSlot[context.mealSlot] = applyTasteVectorDelta(
+      contextTasteVector.mealSlot[context.mealSlot],
+      item,
+      delta
+    );
+  }
+  if (context.mood) {
+    contextTasteVector.mood[context.mood] = applyTasteVectorDelta(
+      contextTasteVector.mood[context.mood],
+      item,
+      delta
+    );
+  }
+  return {
+    ...session,
+    tasteVector: applyTasteVectorDelta(session.tasteVector, item, delta),
+    contextTasteVector,
+  };
+}
+
+export function normalizeTasteVector(value: unknown): TasteVector {
   const vector = emptyTasteVector();
-  if (typeof value !== "object" || value === null) return vector;
-  const source = value as Partial<TasteVector>;
-  const dimensions = [
-    "cuisine",
-    "tasteAttribute",
-    "mealCharacteristic",
-  ] as const;
+  if (!isRecord(value)) return vector;
+  const dimensions = ["cuisine", "tasteAttribute", "mealCharacteristic"] as const;
   for (const dimension of dimensions) {
-    const entries = source[dimension];
-    if (typeof entries !== "object" || entries === null) continue;
+    const entries = value[dimension];
+    if (!isRecord(entries)) continue;
     for (const [name, net] of Object.entries(entries)) {
       if (typeof net !== "number" || !Number.isFinite(net)) continue;
       vector[dimension][name] = Math.trunc(net);
@@ -96,6 +172,34 @@ function normalizeTasteVector(value: unknown): TasteVector {
   }
   return vector;
 }
+
+
+export function normalizeContextTasteVector(value: unknown): PersonalityContextTasteVector {
+  const contextVector = emptyContextTasteVector();
+  if (!isRecord(value)) return contextVector;
+  const weatherValues: PersonalityWeather[] = ["hot", "dry", "cold", "rainy", "mild"];
+  const mealSlotValues: PersonalityMealSlot[] = ["breakfast", "lunch", "dinner", "late-night"];
+  const moodValues: PersonalityMood[] = ["cozy", "light", "energized", "indulgent", "adventurous", "refreshing"];
+  for (const factor of ["weather", "mealSlot", "mood"] as const) {
+    const values = value[factor];
+    if (!isRecord(values)) continue;
+    for (const [key, rawVector] of Object.entries(values)) {
+      const vector = normalizeTasteVector(rawVector);
+      if (factor === "weather") {
+        const weather = weatherValues.find((candidate) => candidate === key);
+        if (weather) contextVector.weather[weather] = vector;
+      } else if (factor === "mealSlot") {
+        const mealSlot = mealSlotValues.find((candidate) => candidate === key);
+        if (mealSlot) contextVector.mealSlot[mealSlot] = vector;
+      } else {
+        const mood = moodValues.find((candidate) => candidate === key);
+        if (mood) contextVector.mood[mood] = vector;
+      }
+    }
+  }
+  return contextVector;
+}
+
 
 /**
  * Reads the stored session. Mood/weather/meal-slot/time are daily context and
@@ -110,15 +214,20 @@ export async function readPersonalitySession(scope?: string): Promise<Personalit
     if (!stored) return fallback;
     const parsed = JSON.parse(stored) as Partial<PersonalitySession>;
     const tasteVector = normalizeTasteVector(parsed.tasteVector);
+    const contextTasteVector = normalizeContextTasteVector(parsed.contextTasteVector);
     if (parsed.dateKey !== fallback.dateKey) {
-      return { ...fallback, tasteVector };
+      return { ...fallback, tasteVector, contextTasteVector };
     }
     return {
       ...fallback,
       ...parsed,
       weatherEnabled: parsed.weatherEnabled !== false,
       timeEnabled: parsed.timeEnabled !== false,
+      followUpShownDate:
+        typeof parsed.followUpShownDate === "string" ? parsed.followUpShownDate : null,
+      lastContext: normalizeContext(parsed.lastContext),
       tasteVector,
+      contextTasteVector,
     };
   } catch {
     return fallback;

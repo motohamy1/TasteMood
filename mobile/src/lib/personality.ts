@@ -1,14 +1,21 @@
-import type { MealCharacteristic, TasteAttribute } from "@/types/dish";
-import type { RecommendationRequest } from "@/types/recommendation";
+import type {
+  PersonalityContext,
+  PersonalityMealSlot as RequestMealSlot,
+  PersonalityMood,
+  PersonalityWeather,
+  RecommendationRequest,
+} from "@/types/recommendation";
+import type { DietaryProperty, MealCharacteristic, TasteAttribute } from "@/types/dish";
 import type { UserPreferences } from "@/types/user";
+import { isRecord } from "@/lib/type-guards";
 
-export type WeatherCondition = "hot" | "dry" | "cold" | "rainy" | "mild";
+export type WeatherCondition = PersonalityWeather;
 export type DiscoveryPreference = "FAMILIAR" | "CURIOUS";
 export type ProfileCompleteness = "NOT_STARTED" | "IN_PROGRESS" | "READY";
-export type PersonalityMealSlot = "breakfast" | "lunch" | "dinner" | "late-night";
+export type PersonalityMealSlot = RequestMealSlot;
 
 export interface MoodOption {
-  id: string;
+  id: PersonalityMood;
   emoji: string;
   label: string;
   labelAr: string;
@@ -108,7 +115,7 @@ const WEATHER_INTENT: Record<
 
 interface PersonalityRequestInput {
   prefs?: UserPreferences | null;
-  mood?: string | null;
+  mood?: PersonalityMood | null;
   weather?: WeatherCondition | null;
   mealSlot?: PersonalityMealSlot | null;
   freeText?: string;
@@ -118,38 +125,60 @@ interface PersonalityRequestInput {
   radiusKm?: number;
 }
 
-interface PersonalityMetadata {
+export interface PersonalityMetadata {
   discoveryPreference?: DiscoveryPreference;
   dietaryConfirmed?: boolean;
+  cuisineConfirmed?: boolean;
+  mealTypesConfirmed?: boolean;
   spiceConfirmed?: boolean;
+  coreAnswers?: Partial<Record<"dietary" | "cuisine" | "mealType" | "spice" | "discovery", string>>;
+  coreCompleted?: boolean;
+  followUpShownDate?: string;
+  guestMergeIds?: string[];
 }
 
 export function getPersonalityMetadata(
-  prefs?: UserPreferences | null
+  prefs?: Partial<UserPreferences> | null
 ): PersonalityMetadata {
-  const raw = prefs?.inferredPreferences;
-  if (!raw || typeof raw !== "object") return {};
-  const personality = (raw as Record<string, unknown>).personality;
-  if (!personality || typeof personality !== "object") return {};
-  return personality as PersonalityMetadata;
+  const inferred = prefs?.inferredPreferences;
+  if (!isRecord(inferred) || !isRecord(inferred.personality)) return {};
+  const source = inferred.personality;
+  const metadata: PersonalityMetadata = {};
+  if (source.discoveryPreference === "FAMILIAR" || source.discoveryPreference === "CURIOUS") {
+    metadata.discoveryPreference = source.discoveryPreference;
+  }
+  for (const key of ["dietaryConfirmed", "cuisineConfirmed", "mealTypesConfirmed", "spiceConfirmed", "coreCompleted"] as const) {
+    if (typeof source[key] === "boolean") metadata[key] = source[key];
+  }
+  if (typeof source.followUpShownDate === "string") metadata.followUpShownDate = source.followUpShownDate;
+  if (Array.isArray(source.guestMergeIds)) {
+    metadata.guestMergeIds = source.guestMergeIds.filter((id): id is string => typeof id === "string");
+  }
+  if (isRecord(source.coreAnswers)) {
+    const answers: NonNullable<PersonalityMetadata["coreAnswers"]> = {};
+    for (const id of ["dietary", "cuisine", "mealType", "spice", "discovery"] as const) {
+      if (typeof source.coreAnswers[id] === "string") answers[id] = source.coreAnswers[id];
+    }
+    metadata.coreAnswers = answers;
+  }
+  return metadata;
 }
 
 export function getProfileCompleteness(
   prefs?: UserPreferences | null
 ): ProfileCompleteness {
   if (!prefs) return "NOT_STARTED";
-
   const metadata = getPersonalityMetadata(prefs);
-  const spiceAnswered = metadata.spiceConfirmed === true || prefs.spicePreference !== 2;
+  if (metadata.coreCompleted) return "READY";
   const answered = [
-    prefs.preferredCuisines.length > 0,
+    metadata.cuisineConfirmed === true || prefs.preferredCuisines.length > 0,
     metadata.dietaryConfirmed === true || prefs.dietaryRestrictions.length > 0,
-    spiceAnswered,
+    metadata.mealTypesConfirmed === true || prefs.preferredMealTypes.length > 0,
+    metadata.spiceConfirmed === true || prefs.spicePreference !== 2,
     metadata.discoveryPreference !== undefined,
   ].filter(Boolean).length;
-
-  if (answered === 0) return "NOT_STARTED";
-  return answered === 4 ? "READY" : "IN_PROGRESS";
+  if (answered === 0 && Object.keys(metadata.coreAnswers ?? {}).length === 0) return "NOT_STARTED";
+  return answered === 5 ? "READY" : "IN_PROGRESS";
 }
 
 function unique<T>(values: T[]): T[] {
@@ -227,6 +256,15 @@ export function buildPersonalityRequest({
           : prefs?.preferredPriceRange === "EXPENSIVE"
             ? 800
             : undefined,
+    ...((mood || weather || mealSlot)
+      ? {
+          personalityContext: {
+            ...(weather ? { weather } : {}),
+            ...(mealSlot ? { mealSlot } : {}),
+            ...(mood ? { mood } : {}),
+          } satisfies PersonalityContext,
+        }
+      : {}),
     ...(latitude != null && longitude != null
       ? { lat: latitude, lng: longitude, radiusKm, nearestFirst: true }
       : {}),

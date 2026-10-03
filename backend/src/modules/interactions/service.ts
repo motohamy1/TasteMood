@@ -3,7 +3,7 @@ import { CreateInteractionInput, QueryInteractionsInput } from './schema.js';
 import { preferencesRepository } from '../preferences/repository.js';
 import { applyTasteVector } from './taste-vector.js';
 
-const VECTOR_INTERACTION_TYPES = ['LIKE', 'SAVED', 'DISLIKE', 'PICKED'];
+const VECTOR_INTERACTION_TYPES = ['LIKE', 'SAVED', 'DISLIKE'];
 
 export class InteractionService {
   async recordInteraction(userId: string, input: CreateInteractionInput) {
@@ -14,7 +14,13 @@ export class InteractionService {
       if (existing) return existing;
     }
 
-    const interaction = await interactionRepository.create(userId, input);
+    const { personalityContext, metadata, ...interactionInput } = input;
+    const interactionMetadata =
+      personalityContext === undefined ? metadata : { ...metadata, personalityContext };
+    const interaction = await interactionRepository.create(userId, {
+      ...interactionInput,
+      ...(interactionMetadata === undefined ? {} : { metadata: interactionMetadata }),
+    });
 
     // Optional background inferred preference enrichment (non-blocking)
     if (VECTOR_INTERACTION_TYPES.includes(input.interactionType)) {

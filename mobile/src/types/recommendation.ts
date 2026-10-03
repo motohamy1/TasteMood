@@ -8,6 +8,22 @@ import type {
  * Response shapes mirror backend/src/modules/recommendations/recommendation.service.ts
  * (see formattedRecommendations / return value of getRecommendations).
  */
+export type PersonalityWeather = "hot" | "dry" | "cold" | "rainy" | "mild";
+export type PersonalityMealSlot = "breakfast" | "lunch" | "dinner" | "late-night";
+export type PersonalityMood =
+  | "cozy"
+  | "light"
+  | "energized"
+  | "indulgent"
+  | "adventurous"
+  | "refreshing";
+
+export interface PersonalityContext {
+  weather?: PersonalityWeather;
+  mealSlot?: PersonalityMealSlot;
+  mood?: PersonalityMood;
+}
+
 export interface RecommendationRequest {
   query?: string;
   maxPrice?: number;
@@ -24,6 +40,7 @@ export interface RecommendationRequest {
   nearestFirst?: boolean;
   surpriseMe?: boolean;
   limit?: number;
+  personalityContext?: PersonalityContext;
 }
 
 export interface RecommendationDish {
@@ -70,6 +87,7 @@ export interface RecommendationScoreBreakdown {
   tasteMatch: number;
   popularity: number;
   freshness: number;
+  learnedAffinity: number;
 }
 
 export interface RecommendationItem {

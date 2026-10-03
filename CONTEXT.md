@@ -24,6 +24,10 @@ The extent to which a taste profile has enough information to personalize a reco
 A descriptive label summarizing a user's stable taste pattern, derived from the taste profile and not edited directly by the user.
 *Avoid*: Personality type, personality test result
 
+**Taste-Discovery Scenario**:
+A situation-based food-or-drink choice used to learn the user's stated taste preferences, not to assess psychological traits.
+_Avoid_: Personality test, psychological profile
+
 ## Current Context
 
 **Live Factor**:
@@ -45,6 +49,10 @@ The current environmental condition relevant to food and drink choices, such as 
 **Live-Factor Override**:
 A user-selected value that replaces an inferred or detected live factor for the current recommendation session.
 *Avoid*: Permanent override, preference change
+
+**Contextual Taste Pattern**:
+A repeated relationship between a user's food-and-drink signals and a Live Factor, used to refine recommendations in similar situations without changing a Stable Preference.
+_Avoid_: Weather preference, personality trait
 
 ## Recommendations
 
@@ -136,4 +144,7 @@ A Place discoverable by its coordinates even when it cannot be assigned to a kno
 - A taste dimension is *measured* at ≥5 net signals; below that it is low-confidence and fair game for pair-taste targeting and one-at-a-time probes (budget ceiling first).
 - Guests learn locally (on-device vector) and merge once, additively, at sign-up; no server-side guest profiles.
 - Provenance is displayed: `learnedAffinity` rides in `scoreBreakdown`, why-lines are deterministic client templates, TraitBars show measured signals and their sources.
+- Personality discovery uses playful food-and-drink scenarios, not psychological assessment; a short core profile precedes first recommendations, then optional targeted questions remain limited to one per day and never block recommendations.
+- Only explicit recommendation feedback updates learned taste: likes, saves, dislikes, and explicit pair-taste answers; views and clicks do not imply preference. Feedback is associated with active Live Factors so recurring Contextual Taste Patterns can refine future recommendations without changing Stable Preferences.
+- Guests complete discovery and receive recommendations without an account; their local taste profile and signals merge additively at sign-up without creating a server-side guest profile.
 

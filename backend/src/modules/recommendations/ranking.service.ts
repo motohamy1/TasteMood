@@ -1,6 +1,8 @@
 import { DEFAULT_RANKING_WEIGHTS, RankingWeights, SURPRISE_MODE_WEIGHTS } from '../../config/ranking.config.js';
 import { UserPreferenceProfile } from '@prisma/client';
 import { StructuredIntent } from '../../ai/intent/intent.schema.js';
+import { z } from 'zod';
+import type { PersonalityContext } from '../personality/personality-context.js';
 
 /**
  * Structural minimum of a dish/restaurant/branch the scorer reads. Full Prisma
@@ -57,12 +59,110 @@ export interface ScoredCandidate<DishT extends RankableDish = RankableDish>
   score: number;
   scoreBreakdown: {
     preferenceMatch: number;
+    learnedAffinity: number;
     priceMatch: number;
     distanceScore: number;
     tasteMatch: number;
     popularity: number;
     freshness: number;
   };
+}
+
+type TasteVector = {
+  cuisine: Record<string, number>;
+  tasteAttribute: Record<string, number>;
+  mealCharacteristic: Record<string, number>;
+};
+
+const TASTE_COUNTERS_SCHEMA = z.record(z.number());
+const TASTE_VECTOR_SCHEMA = z
+  .object({
+    cuisine: z.unknown().optional(),
+    tasteAttribute: z.unknown().optional(),
+    mealCharacteristic: z.unknown().optional(),
+  })
+  .passthrough();
+const CONTEXT_VECTORS_SCHEMA = z.record(z.record(z.unknown()));
+const INFERRED_TASTE_SCHEMA = z
+  .object({
+    tasteVector: z.unknown().optional(),
+    contextTasteVector: z.unknown().optional(),
+  })
+  .passthrough();
+const CONTEXT_FACTORS = ['weather', 'mealSlot', 'mood'] as const;
+
+function readTasteVector(value: unknown): TasteVector | undefined {
+  const parsed = TASTE_VECTOR_SCHEMA.safeParse(value);
+  if (!parsed.success) return undefined;
+  const readCounters = (dimension: unknown) => {
+    const counters = TASTE_COUNTERS_SCHEMA.safeParse(dimension);
+    return counters.success ? counters.data : {};
+  };
+  return {
+    cuisine: readCounters(parsed.data.cuisine),
+    tasteAttribute: readCounters(parsed.data.tasteAttribute),
+    mealCharacteristic: readCounters(parsed.data.mealCharacteristic),
+  };
+}
+
+function vectorAffinity<DishT extends RankableDish>(vector: TasteVector, candidate: CandidateInput<DishT>): number {
+  let sum = 0;
+  let count = 0;
+
+  for (const entry of candidate.restaurant.cuisines ?? []) {
+    const net = vector.cuisine[entry.cuisine.name] ?? 0;
+    sum += Math.max(-1, Math.min(1, net / 5));
+    count++;
+  }
+  for (const attribute of candidate.dish.attributes?.tasteAttributes ?? []) {
+    const net = vector.tasteAttribute[attribute] ?? 0;
+    sum += Math.max(-1, Math.min(1, net / 5));
+    count++;
+  }
+  for (const characteristic of candidate.dish.attributes?.mealCharacteristics ?? []) {
+    const net = vector.mealCharacteristic[characteristic] ?? 0;
+    sum += Math.max(-1, Math.min(1, net / 5));
+    count++;
+  }
+
+  return count === 0 ? 0 : sum / count;
+}
+
+function learnedPreferenceDelta<DishT extends RankableDish>(
+  candidate: CandidateInput<DishT>,
+  userProfile: UserPreferenceProfile | null | undefined,
+  personalityContext: PersonalityContext | undefined,
+): number {
+  if (!userProfile) return 0;
+  const inferred = INFERRED_TASTE_SCHEMA.safeParse(userProfile.inferredPreferences);
+  if (!inferred.success) return 0;
+
+  let affinityTotal = 0;
+  let affinityCount = 0;
+  const globalVector = readTasteVector(inferred.data.tasteVector);
+  if (globalVector) {
+    affinityTotal += vectorAffinity(globalVector, candidate);
+    affinityCount++;
+  }
+
+  if (personalityContext) {
+    const contextVectors = CONTEXT_VECTORS_SCHEMA.safeParse(inferred.data.contextTasteVector);
+    if (contextVectors.success) {
+      for (const factor of CONTEXT_FACTORS) {
+        const value = personalityContext[factor];
+        if (!value) continue;
+
+        const vector = readTasteVector(contextVectors.data[factor]?.[value]);
+        if (!vector) continue;
+        affinityTotal += vectorAffinity(vector, candidate);
+        affinityCount++;
+      }
+    }
+  }
+
+  if (affinityCount === 0) return 0;
+  const contribution = (affinityTotal / affinityCount) * 0.5;
+  return Math.max(-0.3, Math.min(0.3, contribution));
 }
 
 /** Sort nearest-first when requested, keep one closest branch per dish, and cap the result. */
@@ -99,7 +199,8 @@ export class RankingService {
     candidate: CandidateInput<DishT>,
     intent: StructuredIntent,
     userProfile?: UserPreferenceProfile | null,
-    weights: RankingWeights = intent.surpriseMe ? SURPRISE_MODE_WEIGHTS : DEFAULT_RANKING_WEIGHTS
+    weights: RankingWeights = intent.surpriseMe ? SURPRISE_MODE_WEIGHTS : DEFAULT_RANKING_WEIGHTS,
+    personalityContext?: PersonalityContext
   ): ScoredCandidate<DishT> {
     const { dish, restaurant, branch, distanceKm, interactionsCount = 0 } = candidate;
 
@@ -128,6 +229,12 @@ export class RankingService {
         preferenceMatch = Math.max(0.0, preferenceMatch - 0.4);
       }
     }
+    const declaredPreferenceMatch = preferenceMatch;
+    preferenceMatch = Math.max(
+      0,
+      Math.min(1, declaredPreferenceMatch + learnedPreferenceDelta(candidate, userProfile, personalityContext))
+    );
+    const learnedAffinity = preferenceMatch - declaredPreferenceMatch;
 
     // 2. Price Match (0 to 1)
     let priceMatch = 0.7;
@@ -193,6 +300,7 @@ export class RankingService {
       distanceKm,
       score: Number(finalScore.toFixed(3)),
       scoreBreakdown: {
+        learnedAffinity: Number(learnedAffinity.toFixed(2)),
         preferenceMatch: Number(preferenceMatch.toFixed(2)),
         priceMatch: Number(priceMatch.toFixed(2)),
         distanceScore: Number(distanceScore.toFixed(2)),

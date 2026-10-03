@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PersonalityContextSchema } from '../personality/personality-context.js';
 
 export const InteractionTypeEnum = z.enum([
   'VIEW_RESTAURANT',
@@ -19,6 +20,7 @@ export const CreateInteractionSchema = z.object({
   branchId: z.string().uuid().optional(),
   dishId: z.string().uuid().optional(),
   interactionType: InteractionTypeEnum,
+  personalityContext: PersonalityContextSchema.optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 

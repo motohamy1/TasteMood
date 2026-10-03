@@ -15,6 +15,7 @@ import { Image } from "expo-image";
 import { useRecommendations } from "@/lib/queries";
 import { ProfileButton } from "@/components/profile-button";
 import { RecommendationCard } from "@/components/recommendation-card";
+import { RotaryDishWheel } from "@/components/rotary-dish-wheel";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { AmbientGlow } from "@/components/ambient-glow";
@@ -56,6 +57,8 @@ export default function ExploreScreen() {
   const [submitted, setSubmitted] = useState<RecommendationRequest | null>(
     null
   );
+  const [viewMode, setViewMode] = useState<"wheel" | "list">("wheel");
+  const [scrollEnabled, setScrollEnabled] = useState(true);
 
   // Staged (unconfirmed) request from the current selections. Nothing is
   // sent to the backend until handleSubmit copies it into `submitted`.
@@ -122,6 +125,7 @@ export default function ExploreScreen() {
     <View className="flex-1 bg-ink-950 overflow-hidden">
       <AmbientGlow />
       <ScrollView
+        scrollEnabled={scrollEnabled}
         className="flex-1 bg-transparent"
         contentContainerStyle={{
           // gap lives on the inner View — ScrollView contentContainer
@@ -274,12 +278,58 @@ export default function ExploreScreen() {
               <EmptyState icon="🤔" title={t("ai.noMatches")} />
             ) : (
               <View className="gap-3">
-                <CapsLabel>{t("ai.forYou", { count: recs.length })}</CapsLabel>
-                <View className="gap-3">
-                  {recs.map((item) => (
-                    <RecommendationCard key={item.dish.id} item={item} />
-                  ))}
+                <View className="flex-row items-center justify-between">
+                  <CapsLabel>{t("ai.forYou", { count: recs.length })}</CapsLabel>
+                  <View className="flex-row items-center bg-raised rounded-full p-0.5 border border-line">
+                    <Pressable
+                      onPress={() => setViewMode("wheel")}
+                      className={cn(
+                        "px-2.5 py-1 rounded-full",
+                        viewMode === "wheel" ? "bg-amber" : "bg-transparent"
+                      )}
+                    >
+                      <Text
+                        className={cn(
+                          "text-[11px] font-bold",
+                          viewMode === "wheel" ? "text-night" : "text-dim"
+                        )}
+                      >
+                        🎡 Wheel
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setViewMode("list")}
+                      className={cn(
+                        "px-2.5 py-1 rounded-full",
+                        viewMode === "list" ? "bg-amber" : "bg-transparent"
+                      )}
+                    >
+                      <Text
+                        className={cn(
+                          "text-[11px] font-bold",
+                          viewMode === "list" ? "text-night" : "text-dim"
+                        )}
+                      >
+                        📋 List
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
+
+                {viewMode === "wheel" ? (
+                  <RotaryDishWheel
+                    items={recs}
+                    query={submitted?.query}
+                    activeMood={activeMood}
+                    onPanStateChange={(isPanning) => setScrollEnabled(!isPanning)}
+                  />
+                ) : (
+                  <View className="gap-3">
+                    {recs.map((item) => (
+                      <RecommendationCard key={item.dish.id} item={item} />
+                    ))}
+                  </View>
+                )}
               </View>
             )}
           </View>

@@ -51,7 +51,13 @@ export class RecommendationService {
 
     // 5. Rank the closest distinct dishes for browse mode; otherwise use taste score.
     const topCandidates = selectRankedCandidates(
-      candidates.map((candidate) => rankingService.scoreCandidate(candidate, intent, userProfile)),
+      candidates.map((candidate) => rankingService.scoreCandidate(
+        candidate,
+        intent,
+        userProfile,
+        undefined,
+        input.personalityContext
+      )),
       input.limit,
       input.nearestFirst && Boolean(intent.location)
     );

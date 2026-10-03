@@ -14,6 +14,7 @@ import {
   unsaveDish,
 } from "./api";
 import { useAuthStore, selectIsSignedIn } from "./auth-store";
+import { readPersonalitySession } from "./personality-session";
 import type { Dish, DishSummary } from "@/types/dish";
 
 export const savedQueryKeys = {
@@ -89,9 +90,18 @@ function invalidateSavedState(qc: ReturnType<typeof useQueryClient>) {
 
 export function useSaveDish() {
   const qc = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id);
   return useMutation({
-    mutationFn: (dishId: string) =>
-      recordInteraction({ dishId, interactionType: "SAVED" }),
+    mutationFn: async (dishId: string) => {
+      // An explicit save is a Recommendation Signal: attach the live context
+      // the picks were shaped by so contextual taste can learn from it.
+      const session = await readPersonalitySession(userId);
+      return recordInteraction({
+        dishId,
+        interactionType: "SAVED",
+        ...(session.lastContext ? { personalityContext: session.lastContext } : {}),
+      });
+    },
     onMutate: async (dishId) => {
       await qc.cancelQueries({ queryKey: savedQueryKeys.ids });
       const previous = qc.getQueryData<string[]>(savedQueryKeys.ids);
