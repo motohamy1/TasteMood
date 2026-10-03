@@ -66,7 +66,7 @@ export default function SignUpScreen() {
 
         {confirmationSent ? (
           <View className="gap-3">
-            <Text className="text-2xl font-bold text-brand-50">
+            <Text className="text-2xl font-bold text-cream">
               {t("auth.checkEmail")}
             </Text>
             <Text className="text-sm text-cream-mute">
@@ -87,7 +87,7 @@ export default function SignUpScreen() {
               <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
                 {t("auth.signUp")}
               </Text>
-              <Text className="text-2xl font-bold text-brand-50">
+              <Text className="text-2xl font-bold text-cream">
                 {t("auth.createAccount")}
               </Text>
               <Text className="text-sm text-cream-mute">

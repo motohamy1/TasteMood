@@ -135,7 +135,7 @@ export default function ExploreScreen() {
       >
         <View className="gap-5">
           <View className="px-5 flex-row items-center gap-3">
-            <Text className="flex-1 text-3xl leading-9 font-bold text-brand-50">
+            <Text className="flex-1 text-3xl leading-9 font-bold text-cream">
               {t("home.cravingTitle")}
             </Text>
             <ProfileButton />

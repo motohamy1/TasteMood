@@ -63,7 +63,7 @@ export default function AuthScreen() {
           <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
             {t("common.signIn")}
           </Text>
-          <Text className="text-2xl font-bold text-brand-50">
+          <Text className="text-2xl font-bold text-cream">
             {t("auth.welcomeBack")}
           </Text>
           <Text className="text-sm text-cream-mute">

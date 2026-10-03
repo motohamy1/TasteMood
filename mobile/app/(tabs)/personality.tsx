@@ -11,7 +11,12 @@ import {
 import { Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useMyPreferences, useRecommendations, useUpdateMyPreferences } from "@/lib/queries";
+import {
+  useMyPreferences,
+  useRecommendations,
+  useRestaurantAreas,
+  useUpdateMyPreferences,
+} from "@/lib/queries";
 import { useAuthStore, selectIsSignedIn, selectUser } from "@/lib/auth-store";
 import {
   formatDistance,
@@ -42,6 +47,7 @@ import {
   type PersonalitySession,
   type TasteVector,
 } from "@/lib/personality-session";
+import { nearestArea } from "@/lib/browse-groups";
 import { orderByLearnedAffinity } from "@/lib/personality-ranking";
 import { RecommendationCard } from "@/components/recommendation-card";
 import { ProfileButton } from "@/components/profile-button";
@@ -148,7 +154,7 @@ function TraitBar({ label, pct }: { label: string; pct: number }) {
         <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.1em] text-cream-mute">
           {label}
         </Text>
-        <Text className="text-[9px] leading-[12px] font-bold text-brand-50">{clamped}%</Text>
+        <Text className="text-[9px] leading-[12px] font-bold text-cream">{clamped}%</Text>
       </View>
       <View className="h-[4px] rounded-[2px] bg-ink-700 overflow-hidden">
         <View className="h-[4px] rounded-[2px] bg-brand-500" style={{ width: `${clamped}%` }} />
@@ -202,7 +208,7 @@ function RecommendationResults({
     <>
       <View className="px-4 gap-2.5">
         <View className="flex-row items-baseline justify-between">
-          <Text className="text-[13px] leading-[16px] font-bold text-brand-50">{t("personality.todaysPicks")}</Text>
+          <Text className="text-[13px] leading-[16px] font-bold text-cream">{t("personality.todaysPicks")}</Text>
           <Text className="text-[10px] leading-[12px] font-semibold text-accent">{picks.length ? t("personality.matched", { count: picks.length }) : ""}</Text>
         </View>
         {isLoading ? (
@@ -241,7 +247,7 @@ function RecommendationResults({
       {picks.length > 0 ? (
         <View className="px-4">
           <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-2">
-            <Text className="text-[13px] leading-[16px] font-bold text-brand-50">{t("personality.whyTheseFit")}</Text>
+            <Text className="text-[13px] leading-[16px] font-bold text-cream">{t("personality.whyTheseFit")}</Text>
             <Text className="text-[11px] leading-[15px] text-cream-mute">
               {picks[0]?.reason ?? t("personality.whyTheseFit")}
             </Text>
@@ -263,6 +269,7 @@ export default function PersonalityScreen() {
   const user = useAuthStore(selectUser);
   const { data: prefs, isLoading: loadingPrefs } = useMyPreferences();
   const updatePrefs = useUpdateMyPreferences();
+  const areas = useRestaurantAreas();
 
   const clock = useClock();
   const live = useLiveContext();
@@ -347,6 +354,11 @@ export default function PersonalityScreen() {
   }
 
   function requestFor(nextPrefs = effectivePrefs): RecommendationRequest {
+    const isNearby =
+      live.latitude != null &&
+      live.longitude != null &&
+      nearestArea(areas.data ?? [], live.latitude, live.longitude, 100) !== null;
+
     return buildPersonalityRequest({
       prefs: nextPrefs,
       mood: session.mood,
@@ -354,8 +366,8 @@ export default function PersonalityScreen() {
       mealSlot,
       freeText,
       discoveryPreference: getPersonalityMetadata(nextPrefs).discoveryPreference ?? discoveryPreference,
-      latitude: live.latitude,
-      longitude: live.longitude,
+      latitude: isNearby ? live.latitude : undefined,
+      longitude: isNearby ? live.longitude : undefined,
       radiusKm,
     });
   }
@@ -536,7 +548,7 @@ export default function PersonalityScreen() {
                   {t("personality.live")}
                 </Text>
               </View>
-              <Text className="text-[24px] leading-[28px] font-bold text-brand-50">
+              <Text className="text-[24px] leading-[28px] font-bold text-cream">
                 {t("personality.title")}
               </Text>
               <Text className="text-[13px] leading-[16px] text-cream-mute">
@@ -600,9 +612,9 @@ export default function PersonalityScreen() {
 
           {isSignedIn && profileStatus !== "READY" ? (
             <View className="px-4">
-              <View className="bg-wine-deep border border-wine rounded-2xl p-3.5 gap-3">
+              <View className="bg-wine border border-wine-deep rounded-2xl p-3.5 gap-3">
                 <View className="gap-1">
-                  <Text className="text-[13px] font-bold text-brand-50">
+                  <Text className="text-[13px] font-bold text-cream">
                     {profileStatus === "NOT_STARTED" ? t("personality.getToKnow") : t("personality.keepShaping")}
                   </Text>
                   <Text className="text-[11px] leading-[15px] text-cream-mute">
@@ -652,7 +664,7 @@ export default function PersonalityScreen() {
                 <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
                   {t("personality.tuneTodaysPicks")}
                 </Text>
-                <Text className="text-[13px] leading-[16px] font-bold text-brand-50">
+                <Text className="text-[13px] leading-[16px] font-bold text-cream">
                   {t("personality.whatSoundsRight")}
                 </Text>
               </View>

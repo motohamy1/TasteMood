@@ -1,9 +1,10 @@
-import { Stack, useLocalSearchParams, Link } from "expo-router";
+import { Stack, useLocalSearchParams, Link, router } from "expo-router";
 import { Image } from "expo-image";
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -19,31 +20,25 @@ import {
   useUnsaveDish,
 } from "@/lib/saved-dishes";
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/cn";
 import { COLORS } from "@/lib/theme";
-import { AmbientGlow } from "@/components/ambient-glow";
+import { tabIcon } from "@/components/tab-icons";
 import { displayDescription, displayName, useLang, useT } from "@/i18n";
 import { formatPrice } from "@/lib/format";
 
 const SPICE_LEVELS = [
-  { value: "Mild", labelKey: "dish.mild", emoji: "🌱" },
-  { value: "Medium", labelKey: "dish.medium", emoji: "🌶" },
-  { value: "Hot", labelKey: "dish.hot", emoji: "🔥" },
+  { value: "Regular", labelKey: "dish.mild", label: "Regular" },
+  { value: "Medium", labelKey: "dish.medium", label: "Large" },
+  { value: "Hot", labelKey: "dish.hot", label: "X Large" },
 ] as const;
 
-function MetaLabel({ children }: { children: string }) {
-  return (
-    <Text className="w-[74px] text-[10px] font-semibold uppercase tracking-[0.08em] text-cream-mute leading-3">
-      {children}
-    </Text>
-  );
-}
-
 /**
- * Dish Detail: hero card, price/rating row, taste/dietary/ingredient
- * chips, customize panel (portion stepper, spice level, toppings, side
- * options), AI explanation. Customization is client-side only: it
- * expresses the diner's preference, nothing is sent to the backend.
+ * Dish Detail — reference design:
+ * • Edge-to-edge hero photo (takes upper 45% of screen)
+ * • Back button (dark pill) top-left, heart button (dark pill) top-right
+ * • Bottom sheet-style info panel overlapping the photo
+ * • Taste badge, title, rating + price row, description
+ * • Customize: size pills, toggle rows (Add-ons)
+ * • Quantity stepper + Add to Cart CTA at the bottom
  */
 export default function DishDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -53,8 +48,6 @@ export default function DishDetailsScreen() {
   const { data: dish, isLoading, isError, error, refetch } = useDish(id);
   const isSignedIn = useAuthStore(selectIsSignedIn);
 
-  // Savedness comes from the single saved-dishes module — no more scanning a
-  // ≤100-item interaction list or keeping a second optimistic copy here.
   const { data: savedIds } = useSavedDishIds();
   const isSaved = isDishSaved(savedIds, dish?.id);
   const saveDish = useSaveDish();
@@ -62,11 +55,11 @@ export default function DishDetailsScreen() {
   const recordViewDish = useRecordViewDish();
 
   const [portion, setPortion] = useState(1);
-  const [spice, setSpice] = useState<(typeof SPICE_LEVELS)[number]["value"]>("Medium");
-  const [toppings, setToppings] = useState<string[]>([]);
+  const [size, setSize] = useState<"Regular" | "Medium" | "Hot">("Regular");
+  const [addCheese, setAddCheese] = useState(true);
+  const [extraPatty, setExtraPatty] = useState(false);
+  const [addBacon, setAddBacon] = useState(true);
 
-  // Fire a VIEW_DISH interaction once the dish loads (signed-in users only —
-  // the endpoint requires auth and a 401 here is pure noise for guests).
   useEffect(() => {
     if (dish?.id && isSignedIn) {
       recordViewDish.mutate(dish.id);
@@ -76,7 +69,7 @@ export default function DishDetailsScreen() {
 
   function toggleSave() {
     if (!dish) return;
-    if (!isSignedIn) return; // save button hidden in this case
+    if (!isSignedIn) return;
     if (isSaved) {
       unsaveDish.mutate(dish.id);
     } else {
@@ -84,15 +77,11 @@ export default function DishDetailsScreen() {
     }
   }
 
-  function toggleTopping(ing: string) {
-    setToppings((prev) =>
-      prev.includes(ing) ? prev.filter((t) => t !== ing) : [...prev, ing]
-    );
-  }
-
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-ink-950">
+      <View
+        style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.ink950 }}
+      >
         <Stack.Screen options={{ title: t("dish.loading") }} />
         <ActivityIndicator size="large" color={COLORS.amber} />
       </View>
@@ -101,345 +90,552 @@ export default function DishDetailsScreen() {
 
   if (isError || !dish) {
     return (
-      <View className="flex-1 items-center justify-center bg-ink-950 px-6">
+      <View
+        style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.ink950, paddingHorizontal: 24 }}
+      >
         <Stack.Screen options={{ title: t("dish.notFound") }} />
-        <Text className="text-5xl mb-2">⚠️</Text>
-        <Text className="text-lg font-semibold text-cream text-center">
+        <Text style={{ fontSize: 48, marginBottom: 8 }}>⚠️</Text>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: COLORS.cream, textAlign: "center" }}>
           {t("dish.notFoundTitle")}
         </Text>
-        <Text className="text-sm text-cream-mute text-center mt-1">
+        <Text style={{ fontSize: 14, color: COLORS.mute, textAlign: "center", marginTop: 4 }}>
           {(error as Error)?.message ?? t("dish.notFoundDesc")}
         </Text>
         <Pressable
           onPress={() => refetch()}
-          className="mt-4 px-4 py-2 rounded-full bg-brand-cta"
+          style={{
+            marginTop: 16,
+            paddingHorizontal: 20,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: COLORS.amberCta,
+            boxShadow: "0 4px 12px rgba(126,16,57,0.30)",
+          }}
         >
-          <Text className="text-night text-sm font-bold">{t("common.retry")}</Text>
+          <Text style={{ color: COLORS.night, fontSize: 14, fontWeight: "700" }}>
+            {t("common.retry")}
+          </Text>
         </Pressable>
       </View>
     );
   }
 
+  const dishName = displayName(lang, dish);
+  const description = displayDescription(lang, dish);
+  const price = formatPrice(dish.price, dish.currency);
+  const totalPrice = dish.price
+    ? formatPrice(dish.price * portion, dish.currency)
+    : price;
+
   return (
-    <View className="flex-1 bg-ink-950 overflow-hidden">
-      <AmbientGlow top={80} />
+    <View style={{ flex: 1, backgroundColor: COLORS.ink950 }}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* ── Hero Photo — edge to edge ── */}
+      <View style={{ height: 320, backgroundColor: COLORS.raised }}>
+        {dish.imageUrl ? (
+          <Image
+            source={{ uri: dish.imageUrl }}
+            style={{ width: "100%", height: 320 }}
+            contentFit="cover"
+            transition={200}
+          />
+        ) : (
+          <View
+            style={{
+              width: "100%",
+              height: 320,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ fontSize: 72 }}>🍽</Text>
+          </View>
+        )}
+
+        {/* Gradient overlay bottom of photo */}
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 100,
+            backgroundColor: "rgba(43,5,21,0.0)",
+          }}
+          pointerEvents="none"
+        />
+
+        {/* Back button */}
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          style={{
+            position: "absolute",
+            top: insets.top + 8,
+            left: 16,
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            backgroundColor: COLORS.pillOnPhoto,
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(43,5,21,0.18)",
+          }}
+        >
+          <Image
+            source={tabIcon("back", COLORS.amberCta, 18)}
+            style={{ width: 18, height: 18 }}
+          />
+        </Pressable>
+
+        {/* Heart / Save button */}
+        <Pressable
+          onPress={isSignedIn ? toggleSave : () => router.push("/auth")}
+          accessibilityRole="button"
+          style={{
+            position: "absolute",
+            top: insets.top + 8,
+            right: 16,
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            backgroundColor: isSaved ? COLORS.amber : COLORS.pillOnPhoto,
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: isSaved
+              ? "0 2px 10px rgba(192,36,92,0.40)"
+              : "0 2px 8px rgba(43,5,21,0.18)",
+          }}
+        >
+          <Image
+            source={tabIcon(
+              isSaved ? "heart-filled" : "favourites",
+              isSaved ? COLORS.night : COLORS.amber,
+              18
+            )}
+            style={{ width: 18, height: 18 }}
+          />
+        </Pressable>
+      </View>
+
+      {/* ── Info Sheet — overlaps photo ── */}
       <ScrollView
-        className="flex-1 bg-transparent"
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        style={{ flex: 1, marginTop: -30 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
         showsVerticalScrollIndicator={false}
       >
-        <Stack.Screen options={{ title: t("dish.detail") }} />
-
-        {/* Top row */}
         <View
-          className="flex-row items-center gap-2 px-4"
-          style={{ paddingTop: insets.top + 8 }}
+          style={{
+            backgroundColor: COLORS.ink950,
+            borderTopLeftRadius: 30,
+            borderTopRightRadius: 30,
+            paddingTop: 22,
+            paddingHorizontal: 20,
+            gap: 0,
+          }}
         >
-          <Link href="/(tabs)" asChild>
-            <Pressable className="w-9 h-9 rounded-full bg-ink-900 border border-ink-700 items-center justify-center">
-              <Text className="text-[14px] text-cream">←</Text>
-            </Pressable>
-          </Link>
-          <Text className="flex-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
-            {t("dish.dish")} • {dish.cuisine}
-          </Text>
-          {isSignedIn ? (
-            <Pressable
-              onPress={toggleSave}
-              hitSlop={8}
-              className="w-8 h-8 rounded-full bg-brand-cta items-center justify-center"
-            >
-              <Text className="text-[14px] text-night">
-                {isSaved ? "♥" : "♡"}
-              </Text>
-            </Pressable>
-          ) : (
-            <Link href="/auth" asChild>
-              <Pressable hitSlop={8} className="px-2 py-1">
-                <Text className="text-[11px] text-accent font-bold">
-                  {t("common.signIn")}
+          {/* Taste badge + menu dots row */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 12,
+            }}
+          >
+            {dish.tasteAttributes.length > 0 ? (
+              <View
+                style={{
+                  backgroundColor: COLORS.amber,
+                  borderRadius: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "700", color: COLORS.night }}>
+                  {dish.tasteAttributes[0].toLowerCase().replace(/_/g, " ")}
                 </Text>
-              </Pressable>
-            </Link>
-          )}
-        </View>
-
-        {/* Hero */}
-        <View className="px-4 mt-3">
-          <View className="rounded-2xl overflow-hidden bg-wine-deep border border-ink-700">
-            {dish.imageUrl ? (
-              <Image
-                source={{ uri: dish.imageUrl }}
-                className="w-full h-56"
-                contentFit="cover"
-                transition={200}
-              />
-            ) : (
-              <View className="w-full h-56 items-center justify-center">
-                <Text className="text-6xl">🍽</Text>
               </View>
-            )}
-          </View>
-        </View>
-
-        <View className="px-4 pt-4 gap-4">
-          <View className="gap-1">
-            <Text className="text-[22px] font-bold text-brand-50 leading-[26px]">
-              {displayName(lang, dish)}
-            </Text>
-            <Text className="text-xs text-cream-mute">
-              {displayName(lang, { name: dish.restaurantName, nameEn: dish.restaurantNameEn })}
-              {dish.branchName ? ` · ${dish.branchName}` : ""}
-              {dish.cuisine ? ` · ${dish.cuisine}` : ""}
-            </Text>
-            <View className="flex-row items-center gap-2 mt-1">
-              <Text className="text-xl font-extrabold text-accent">
-                {formatPrice(dish.price, dish.currency)}
-              </Text>
-              {dish.verificationStatus === "UNVERIFIED" ? (
-                <View className="px-1.5 py-px rounded-full border border-ink-700">
-                  <Text className="text-[8px] font-semibold text-cream-mute">
-                    {t("dish.estimated")}
-                  </Text>
-                </View>
-              ) : null}
-              {typeof dish.rating === "number" ? (
-                <Text className="text-xs text-brand-50">
-                  ★ {dish.rating.toFixed(1)}
-                  {dish.reviewCount && dish.reviewCount > 0
-                    ? ` · ${dish.reviewCount} ${t("dish.reviews")}`
-                    : ""}
+            ) : dish.cuisine ? (
+              <View
+                style={{
+                  backgroundColor: COLORS.raised,
+                  borderRadius: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderWidth: 1,
+                  borderColor: COLORS.line,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "600", color: COLORS.dim }}>
+                  {dish.cuisine}
                 </Text>
-              ) : null}
+              </View>
+            ) : (
+              <View />
+            )}
+            <View
+              style={{ flexDirection: "row", gap: 4 }}
+            >
+              {[0, 1, 2].map((i) => (
+                <View
+                  key={i}
+                  style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: 2.5,
+                    backgroundColor: COLORS.line,
+                  }}
+                />
+              ))}
             </View>
           </View>
 
-          <View className="gap-2">
-            {displayDescription(lang, dish) ? (
-              <Text className="text-[13px] text-cream-dim leading-5">
-                {displayDescription(lang, dish)}
-              </Text>
-            ) : null}
+          {/* Title */}
+          <Text
+            style={{
+              fontSize: 24,
+              fontWeight: "800",
+              color: COLORS.cream,
+              lineHeight: 28,
+              marginBottom: 8,
+            }}
+          >
+            {dishName}
+          </Text>
 
-            {dish.tasteAttributes.length > 0 && (
-              <View className="flex-row items-center flex-wrap gap-1.5">
-                <MetaLabel>{t("dish.taste")}</MetaLabel>
-                {dish.tasteAttributes.map((tag) => (
-                  <View key={tag} className="bg-wine px-2.5 py-1 rounded-full">
-                    <Text className="text-[11px] font-semibold text-cream uppercase">
-                      {tag.toLowerCase().replace(/_/g, " ")}
+          {/* Rating + Price row */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 14,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {typeof dish.rating === "number" ? (
+                <>
+                  <Text style={{ fontSize: 14, color: COLORS.amber }}>★</Text>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: COLORS.cream }}>
+                    {dish.rating.toFixed(1)}
+                  </Text>
+                  {dish.reviewCount && dish.reviewCount > 0 ? (
+                    <Text style={{ fontSize: 13, color: COLORS.mute }}>
+                      ({dish.reviewCount})
                     </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {dish.dietaryProperties.length > 0 && (
-              <View className="flex-row items-center flex-wrap gap-1.5">
-                <MetaLabel>{t("dish.dietary")}</MetaLabel>
-                {dish.dietaryProperties.map((tag) => (
-                  <View
-                    key={tag}
-                    className="bg-success-bg px-2.5 py-1 rounded-full"
-                  >
-                    <Text className="text-[11px] font-semibold text-cream uppercase">
-                      {tag.toLowerCase().replace(/_/g, " ")}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {dish.ingredients.length > 0 && (
-              <View className="flex-row items-center flex-wrap gap-1.5">
-                <MetaLabel>{t("dish.ingredients")}</MetaLabel>
-                {dish.ingredients.map((ing) => (
-                  <View
-                    key={ing}
-                    className="bg-neutral-chip px-2.5 py-1 rounded-full"
-                  >
-                    <Text className="text-[11px] text-cream">{ing}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
+                  ) : null}
+                </>
+              ) : null}
+            </View>
+            <Text
+              style={{ fontSize: 20, fontWeight: "800", color: COLORS.amber }}
+            >
+              {price}
+            </Text>
           </View>
 
+          {/* Description */}
+          {description ? (
+            <Text
+              style={{
+                fontSize: 13,
+                lineHeight: 20,
+                color: COLORS.dim,
+                marginBottom: 22,
+              }}
+            >
+              {description}
+            </Text>
+          ) : null}
+
+          {/* ── Customize Section ── */}
+          <Text
+            style={{
+              fontSize: 17,
+              fontWeight: "800",
+              color: COLORS.cream,
+              marginBottom: 14,
+            }}
+          >
+            Customize
+          </Text>
+
+          {/* Size pills */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 16,
+              gap: 10,
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: "600", color: COLORS.dim, width: 100 }}>
+              {t("dish.portion")}
+            </Text>
+            <View style={{ flex: 1, flexDirection: "row", gap: 8 }}>
+              {SPICE_LEVELS.map((level) => {
+                const active = size === level.value;
+                return (
+                  <Pressable
+                    key={level.value}
+                    onPress={() => setSize(level.value as any)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 8,
+                      borderRadius: 20,
+                      alignItems: "center",
+                      backgroundColor: active ? COLORS.amber : COLORS.raised,
+                      borderWidth: 1,
+                      borderColor: active ? COLORS.amber : COLORS.line,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: active ? "700" : "500",
+                        color: active ? COLORS.night : COLORS.dim,
+                      }}
+                    >
+                      {level.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Toggle rows — add-ons */}
+          {[
+            { label: "Add Cheese", value: addCheese, setter: setAddCheese },
+            { label: "Extra Patty", value: extraPatty, setter: setExtraPatty },
+            ...(dish.ingredients.length > 0
+              ? [{ label: "Add Bacon", value: addBacon, setter: setAddBacon }]
+              : []),
+          ].map(({ label, value, setter }) => (
+            <View
+              key={label}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingVertical: 12,
+                borderBottomWidth: 1,
+                borderBottomColor: COLORS.line,
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "600", color: COLORS.cream }}>
+                {label}
+              </Text>
+              <Switch
+                value={value}
+                onValueChange={setter}
+                trackColor={{ false: COLORS.raised, true: COLORS.amber }}
+                thumbColor={COLORS.panel}
+                ios_backgroundColor={COLORS.raised}
+              />
+            </View>
+          ))}
+
+          {/* Dietary tags */}
+          {dish.dietaryProperties.length > 0 ? (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 16 }}>
+              {dish.dietaryProperties.map((tag) => (
+                <View
+                  key={tag}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 10,
+                    backgroundColor: COLORS.successBg,
+                    borderWidth: 1,
+                    borderColor: COLORS.successLine,
+                  }}
+                >
+                  <Text style={{ fontSize: 10, fontWeight: "600", color: COLORS.successText }}>
+                    {tag.toLowerCase().replace(/_/g, " ")}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {/* AI explanation */}
           {dish.aiExplanation ? (
-            <View className="bg-brand-50 border border-brand-100 rounded-[14px] p-2.5 gap-0.5">
-              <Text className="text-[10px] font-bold uppercase tracking-[0.08em] text-oncard-price">
+            <View
+              style={{
+                marginTop: 16,
+                padding: 12,
+                borderRadius: 14,
+                backgroundColor: COLORS.wine,
+                borderWidth: 1,
+                borderColor: COLORS.wineDeep,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: "700",
+                  color: COLORS.amberCta,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                  marginBottom: 4,
+                }}
+              >
                 {t("dish.whyThisDish")}
               </Text>
-              <Text className="text-xs text-oncard leading-4">
+              <Text style={{ fontSize: 12, lineHeight: 18, color: COLORS.dim }}>
                 {dish.aiExplanation}
               </Text>
             </View>
           ) : null}
 
-          <View className="flex-row gap-2">
-            {typeof dish.calories === "number" ? (
-              <View className="flex-1 bg-ink-900 border border-ink-700 p-2 rounded-xl">
-                <Text className="text-[9px] uppercase text-cream-mute leading-3">
-                  Calories
-                </Text>
-                <Text className="text-[13px] font-bold text-cream mt-0.5">
-                  {dish.calories} kcal
-                </Text>
-              </View>
-            ) : null}
-            {typeof dish.prepTimeMinutes === "number" ? (
-              <View className="flex-1 bg-ink-900 border border-ink-700 p-2 rounded-xl">
-                <Text className="text-[9px] uppercase text-cream-mute leading-3">
-                  Prep time
-                </Text>
-                <Text className="text-[13px] font-bold text-cream mt-0.5">
-                  {dish.prepTimeMinutes} min
-                </Text>
-              </View>
-            ) : null}
-            {isSignedIn ? (
-              <Pressable
-                onPress={toggleSave}
-                className={cn(
-                  "flex-1 rounded-xl items-center justify-center p-2",
-                  isSaved ? "bg-ink-700" : "bg-brand-cta"
-                )}
-              >
-                <Text
-                  className={cn(
-                    "text-xs font-extrabold",
-                    isSaved ? "text-cream" : "text-night"
-                  )}
+          {/* Nutrient tiles */}
+          {(typeof dish.calories === "number" || typeof dish.prepTimeMinutes === "number") ? (
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
+              {typeof dish.calories === "number" ? (
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: COLORS.panel,
+                    borderRadius: 14,
+                    padding: 10,
+                    borderWidth: 1,
+                    borderColor: COLORS.line,
+                  }}
                 >
-                  {isSaved ? t("common.saved") : t("common.save")}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-
-          {/* Customize panel */}
-          <View className="gap-2.5">
-            <Text className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">
-              {t("dish.customize")}
-            </Text>
-
-            <View className="flex-row items-center justify-between bg-ink-900 border border-ink-700 rounded-xl px-3.5 py-2.5">
-              <Text className="text-[13px] font-semibold text-cream">
-                {t("dish.portion")}
-              </Text>
-              <View className="flex-row items-center gap-3">
-                <Pressable
-                  onPress={() => setPortion((p) => Math.max(1, p - 1))}
-                  className="w-7 h-7 rounded-full bg-ink-700 items-center justify-center active:opacity-70"
-                >
-                  <Text className="text-sm text-cream">−</Text>
-                </Pressable>
-                <Text className="text-sm font-bold text-cream min-w-[20px] text-center">
-                  {portion}
-                </Text>
-                <Pressable
-                  onPress={() => setPortion((p) => Math.min(9, p + 1))}
-                  className="w-7 h-7 rounded-full bg-brand-cta items-center justify-center active:opacity-85"
-                >
-                  <Text className="text-sm text-night font-bold">+</Text>
-                </Pressable>
-              </View>
-            </View>
-
-            <View className="bg-ink-900 border border-ink-700 rounded-xl px-3.5 py-2.5 gap-2">
-              <Text className="text-[13px] font-semibold text-cream">
-                {t("dish.spiceLevel")}
-              </Text>
-              <View className="flex-row gap-1.5">
-                {SPICE_LEVELS.map((level) => {
-                  const active = spice === level.value;
-                  return (
-                    <Pressable
-                      key={level.value}
-                      onPress={() => setSpice(level.value)}
-                      className={cn(
-                        "flex-1 py-1.5 rounded-full items-center border",
-                        active
-                          ? "bg-brand-cta border-brand-cta"
-                          : "border-ink-700"
-                      )}
-                    >
-                      <Text
-                        className={cn(
-                          "text-[11px]",
-                          active ? "font-semibold text-night" : "text-cream-mute"
-                        )}
-                      >
-                        {level.emoji} {t(level.labelKey)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {dish.ingredients.length > 0 ? (
-              <View className="gap-1.5">
-                <Text className="text-[13px] font-semibold text-cream">
-                  {t("dish.toppings")}
-                </Text>
-                <View className="flex-row flex-wrap gap-1.5">
-                  {dish.ingredients.map((ing) => {
-                    const selected = toppings.includes(ing);
-                    return (
-                      <Pressable
-                        key={ing}
-                        onPress={() => toggleTopping(ing)}
-                        className={cn(
-                          "px-2.5 py-1 rounded-full border",
-                          selected
-                            ? "bg-wine border-wine"
-                            : "border-ink-700"
-                        )}
-                      >
-                        <Text
-                          className={cn(
-                            "text-[11px]",
-                            selected ? "font-semibold text-cream" : "text-cream-mute"
-                          )}
-                        >
-                          {selected ? "✓ " : ""}
-                          {ing}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                  <Text style={{ fontSize: 9, textTransform: "uppercase", color: COLORS.mute }}>
+                    Calories
+                  </Text>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: COLORS.cream, marginTop: 3 }}>
+                    {dish.calories} kcal
+                  </Text>
                 </View>
-              </View>
-            ) : null}
-
-            {dish.tags.length > 0 ? (
-              <View className="gap-1.5">
-                <Text className="text-[13px] font-semibold text-cream">
-                  {t("dish.sideOptions")}
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 8 }}
+              ) : null}
+              {typeof dish.prepTimeMinutes === "number" ? (
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: COLORS.panel,
+                    borderRadius: 14,
+                    padding: 10,
+                    borderWidth: 1,
+                    borderColor: COLORS.line,
+                  }}
                 >
-                  {dish.tags.map((tag) => (
-                    <View
-                      key={tag}
-                      className="bg-ink-900 border border-ink-700 px-3 py-1.5 rounded-xl"
-                    >
-                      <Text className="text-[11px] text-cream font-medium">
-                        {tag}
-                      </Text>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-          </View>
+                  <Text style={{ fontSize: 9, textTransform: "uppercase", color: COLORS.mute }}>
+                    Prep time
+                  </Text>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: COLORS.cream, marginTop: 3 }}>
+                    {dish.prepTimeMinutes} min
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
+
+      {/* ── Bottom CTA Bar ── */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          paddingBottom: insets.bottom + 8,
+          paddingTop: 12,
+          paddingHorizontal: 20,
+          backgroundColor: COLORS.ink950,
+          borderTopWidth: 1,
+          borderTopColor: COLORS.line,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 16,
+        }}
+      >
+        {/* Quantity stepper */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 14,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: COLORS.panel,
+            borderWidth: 1,
+            borderColor: COLORS.line,
+          }}
+        >
+          <Pressable
+            onPress={() => setPortion((p) => Math.max(1, p - 1))}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 14,
+              borderWidth: 1.5,
+              borderColor: COLORS.line,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ fontSize: 16, color: COLORS.cream, fontWeight: "700", lineHeight: 18 }}>
+              −
+            </Text>
+          </Pressable>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: COLORS.cream, minWidth: 16, textAlign: "center" }}>
+            {portion}
+          </Text>
+          <Pressable
+            onPress={() => setPortion((p) => Math.min(9, p + 1))}
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 14,
+              backgroundColor: COLORS.amber,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ fontSize: 16, color: COLORS.night, fontWeight: "700", lineHeight: 18 }}>
+              +
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Add to Cart */}
+        <Pressable
+          style={{
+            flex: 1,
+            height: 50,
+            borderRadius: 25,
+            backgroundColor: COLORS.amberCta,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            boxShadow: "0 6px 16px rgba(126,16,57,0.35)",
+          }}
+        >
+          <Text style={{ fontSize: 15, fontWeight: "800", color: COLORS.night }}>
+            {isSignedIn ? "Add to Cart" : t("common.signIn")}
+          </Text>
+          <View
+            style={{
+              backgroundColor: "rgba(255,255,255,0.22)",
+              borderRadius: 14,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}
+          >
+            <Text style={{ fontSize: 13, fontWeight: "700", color: COLORS.night }}>
+              {totalPrice}
+            </Text>
+          </View>
+        </Pressable>
+      </View>
     </View>
   );
 }

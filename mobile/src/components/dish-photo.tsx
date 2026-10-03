@@ -2,6 +2,7 @@ import { Image } from "expo-image";
 import { Text, View } from "react-native";
 
 import { cn } from "@/lib/cn";
+import { COLORS } from "@/lib/theme";
 
 interface Props {
   /** Real photo URL; when null/undefined the emoji placeholder shows instead. */
@@ -16,10 +17,7 @@ interface Props {
 
 /**
  * A dish image surface that degrades gracefully: renders the real photo when
- * the catalog has one, otherwise a soft tile with a representative food emoji.
- * Because every current dish has `imageUrl: null`, this is what the whole
- * browse UI actually shows today — it upgrades to photos with no further work
- * once images are populated.
+ * the catalog has one, otherwise a dark tile with a food emoji.
  */
 export function DishPhoto({
   uri,
@@ -32,7 +30,7 @@ export function DishPhoto({
     return (
       <Image
         source={{ uri }}
-        className={cn("bg-[#ECECEC]", className)}
+        className={cn("bg-ink-800", className)}
         contentFit="cover"
         transition={200}
         accessibilityLabel={accessibilityLabel}
@@ -42,7 +40,7 @@ export function DishPhoto({
 
   return (
     <View
-      className={cn("items-center justify-center overflow-hidden", className)}
+      className={cn("items-center justify-center overflow-hidden bg-ink-800", className)}
       accessibilityLabel={accessibilityLabel}
     >
       <Text style={{ fontSize: emojiSize }} accessibilityRole="image">

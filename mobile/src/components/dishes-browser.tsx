@@ -4,8 +4,8 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StatusBar,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { Image } from "expo-image";
@@ -13,19 +13,16 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DishCard } from "@/components/dish-card";
-import { RecommendationCard } from "@/components/recommendation-card";
-import { RestaurantCard } from "@/components/restaurant-card";
-import { marketIcon } from "@/components/market-icons";
+import { tabIcon } from "@/components/tab-icons";
+import { AmbientGlow } from "@/components/ambient-glow";
 import {
   useDishes,
   useMyPreferences,
   useRecommendations,
   useRestaurantAreas,
-  useRestaurants,
 } from "@/lib/queries";
 import { useClock, useLiveContext } from "@/lib/live-context";
 import {
-  PERSONALITY_MOODS,
   SLOT_LABELS,
   WEATHER_OPTIONS,
   buildPersonalityRequest,
@@ -33,8 +30,6 @@ import {
   type WeatherCondition,
 } from "@/lib/personality";
 import {
-  cardFromRestaurant,
-  cardsFromRecommendations,
   dedupeRecommendations,
   nearestArea,
 } from "@/lib/browse-groups";
@@ -42,11 +37,10 @@ import type {
   RecommendationItem,
   RecommendationRequest,
 } from "@/types/recommendation";
-import type { RestaurantCardItem } from "@/types/restaurant";
 import type { TranslationKey } from "@/i18n/dictionaries";
 import { displayName, useLang, useT } from "@/i18n";
 import { cn } from "@/lib/cn";
-import { COLORS } from "@/lib/theme";
+import { CARD_SHADOW, COLORS } from "@/lib/theme";
 
 const SLOT_KEYS: Record<PersonalityMealSlot, TranslationKey> = {
   breakfast: "personality.slotBreakfast",
@@ -63,28 +57,13 @@ const WEATHER_KEYS: Record<WeatherCondition, TranslationKey> = {
   mild: "personality.weatherMild",
 };
 
-const MOOD_KEYS: Record<string, TranslationKey> = {
-  cozy: "personality.moodCozy",
-  light: "personality.moodLight",
-  energized: "personality.moodEnergized",
-  indulgent: "personality.moodIndulgent",
-  adventurous: "personality.moodAdventurous",
-  refreshing: "personality.moodRefreshing",
-};
-
 interface Props {
   headerLeft?: "menu" | "back";
 }
 
 /**
- * Dishes page: three category criteria — mood, weather and area — each showing
- * its categories and, for the selected one, the matching dishes and places.
- *
- * Mood and weather are taste/intent dimensions, so they ride the recommendation
- * engine (meal + taste intent, no distance cut: a mood is not a place). Area is
- * a catalogue dimension: places come from the restaurant catalogue by markaz
- * (or by distance for "near me") and its dishes are the ones published for the
- * places of that markaz.
+ * Home screen: greeting header, search bar, weather recommendations,
+ * and location-based dish rails.
  */
 export function DishesBrowser({ headerLeft = "back" }: Props) {
   const insets = useSafeAreaInsets();
@@ -95,10 +74,9 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
   const preferences = useMyPreferences();
   const areas = useRestaurantAreas();
 
-  const [mood, setMood] = useState<string | null>(null);
   const [weatherOverride, setWeatherOverride] = useState<WeatherCondition | null>(null);
-  /** null = "near me"; an area slug pins the section to that markaz. */
   const [areaSlug, setAreaSlug] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
 
   const liveWeather = weatherOverride ?? live.weatherCategory;
   const ready = !live.loading && !preferences.isLoading;
@@ -109,94 +87,64 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
     () => nearestArea(areaList, live.latitude, live.longitude),
     [areaList, live.latitude, live.longitude]
   );
-  // Without a device position "near me" cannot resolve, so the rail starts on
-  // the biggest area instead of showing an empty section.
   const defaultAreaSlug = nearMeAvailable ? null : (areaList[0]?.slug ?? null);
   const activeAreaSlug = areaSlug ?? defaultAreaSlug;
   const activeArea =
     (activeAreaSlug
       ? areaList.find((area) => area.slug === activeAreaSlug)
-      : nearMeArea) ?? null;
+      : (nearMeArea ?? areaList[0])) ?? null;
 
-  const requests = useMemo<{
-    mood: RecommendationRequest;
-    weather: RecommendationRequest;
-  }>(() => {
-    const base = { prefs: preferences.data, mealSlot: clock.slot };
-    return {
-      mood: buildPersonalityRequest({ ...base, mood, weather: null }),
-      weather: buildPersonalityRequest({ ...base, mood: null, weather: liveWeather }),
-    };
-  }, [clock.slot, liveWeather, mood, preferences.data]);
+  const weatherRequest = useMemo<RecommendationRequest>(() => {
+    return buildPersonalityRequest({
+      prefs: preferences.data,
+      mealSlot: clock.slot,
+      mood: null,
+      weather: liveWeather,
+    });
+  }, [clock.slot, liveWeather, preferences.data]);
 
-  const moodPicks = useRecommendations(ready ? requests.mood : null);
-  const weatherPicks = useRecommendations(ready ? requests.weather : null);
+  const weatherPicks = useRecommendations(ready ? weatherRequest : null);
   const areaDishes = useDishes(
     { city: activeArea?.slug, limit: 12 },
     { enabled: ready && activeArea !== null }
   );
-  const areaPlaces = useRestaurants(
-    activeAreaSlug
-      ? { city: activeAreaSlug, limit: 12 }
-      : {
-          latitude: live.latitude ?? undefined,
-          longitude: live.longitude ?? undefined,
-          radiusKm: 10,
-          sort: "distance" as const,
-          limit: 12,
-        },
-    { enabled: ready && (activeAreaSlug !== null || nearMeAvailable) }
-  );
 
-  const moodDishes = useMemo(
-    () => dedupeRecommendations(moodPicks.data?.recommendations),
-    [moodPicks.data]
-  );
   const weatherDishes = useMemo(
     () => dedupeRecommendations(weatherPicks.data?.recommendations),
     [weatherPicks.data]
   );
-  const moodPlaces = useMemo(() => cardsFromRecommendations(moodDishes), [moodDishes]);
-  const weatherPlaces = useMemo(
-    () => cardsFromRecommendations(weatherDishes),
-    [weatherDishes]
-  );
-  const areaPlaceCards = useMemo(
-    () => (areaPlaces.data ?? []).map(cardFromRestaurant),
-    [areaPlaces.data]
-  );
   const areaDishCards = areaDishes.data ?? [];
 
   const refreshing =
-    moodPicks.isRefetching ||
     weatherPicks.isRefetching ||
-    areaDishes.isRefetching ||
-    areaPlaces.isRefetching;
+    areaDishes.isRefetching;
 
-  const activeWeatherOption = WEATHER_OPTIONS.find(
-    (option) => option.value === liveWeather
-  );
+  // Greeting based on time slot
+  const greetingLine = (() => {
+    const slot = clock.slot;
+    if (slot === "breakfast") return "Good Morning";
+    if (slot === "lunch") return "Good Afternoon";
+    if (slot === "dinner") return "Good Evening";
+    return "Good Night";
+  })();
 
   return (
-    <View className="flex-1 bg-ink-950">
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.ink950} />
+    <View style={{ flex: 1, backgroundColor: COLORS.ink950 }}>
+      <AmbientGlow top={0} />
       <ScrollView
-        className="flex-1"
-        contentInsetAdjustmentBehavior="automatic"
+        style={{ flex: 1 }}
         contentContainerStyle={{
           paddingTop: insets.top + 8,
-          paddingBottom: insets.bottom + 116,
-          gap: 26,
+          paddingBottom: insets.bottom + 80,
+          gap: 0,
         }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => {
-              void moodPicks.refetch();
               void weatherPicks.refetch();
               void areaDishes.refetch();
-              void areaPlaces.refetch();
               void areas.refetch();
             }}
             tintColor={COLORS.amber}
@@ -204,413 +152,528 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
           />
         }
       >
-        <View className="flex-row items-center gap-3 px-5">
+        {/* ── Header Row ── */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingHorizontal: 20,
+            paddingBottom: 16,
+          }}
+        >
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t(headerLeft === "back" ? "common.back" : "profile.title")}
             onPress={() =>
               headerLeft === "back" ? router.back() : router.push("/profile")
             }
-            className="h-11 w-11 items-center justify-center rounded-2xl bg-ink-900 active:opacity-75"
-            style={{ borderCurve: "continuous" }}
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 14,
+              backgroundColor: COLORS.panel,
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 1,
+              borderColor: COLORS.line,
+            }}
           >
             <Image
-              source={marketIcon(headerLeft === "back" ? "back" : "menu", COLORS.cream, 20)}
+              source={tabIcon(
+                headerLeft === "back" ? "back" : "menu",
+                COLORS.cream,
+                20
+              )}
               style={{ width: 20, height: 20 }}
             />
           </Pressable>
-          <View className="flex-1">
-            <Text className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent">
-              {t("home.discover")}
-            </Text>
-            <Text className="text-[25px] leading-[30px] font-bold text-brand-50">
-              {t("browse.title")}
-            </Text>
-          </View>
-          <Text className="text-xs font-semibold tabular-nums text-cream-mute">
-            {clock.clock}
-          </Text>
-        </View>
 
-        <View className="px-5 gap-2">
-          <Text className="text-[13px] leading-5 text-cream-dim">
-            {t("browse.subtitle")}
-          </Text>
-          <View className="flex-row flex-wrap gap-2">
-            <View className="flex-row items-center gap-1.5 rounded-full bg-ink-900 px-3 py-1.5">
-              <Text className="text-sm">{SLOT_LABELS[clock.slot].emoji}</Text>
-              <Text className="text-[11px] font-semibold text-cream">
-                {t("dishes.timeContext", { slot: t(SLOT_KEYS[clock.slot]) })}
-              </Text>
-            </View>
-            <View className="flex-row items-center gap-1.5 rounded-full bg-ink-900 px-3 py-1.5">
-              <Text className="text-sm">
-                {activeWeatherOption?.emoji ?? (live.loading ? "🌦️" : "📍")}
-              </Text>
-              <Text className="text-[11px] font-semibold text-cream">
-                {liveWeather
-                  ? t(WEATHER_KEYS[liveWeather])
-                  : t("dishes.weatherUnavailable")}
-                {live.tempC !== null && weatherOverride === null
-                  ? ` · ${live.tempC}°C`
-                  : ""}
-              </Text>
-            </View>
-            {live.city ? (
-              <View className="flex-row items-center gap-1.5 rounded-full bg-ink-900 px-3 py-1.5">
-                <Text className="text-sm">⌖</Text>
-                <Text
-                  numberOfLines={1}
-                  className="max-w-[180px] text-[11px] font-medium text-cream-dim"
-                >
-                  {live.city}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
-
-        <BrowseSection
-          title={t("browse.moodTitle")}
-          subtitle={t("browse.moodSubtitle")}
-          tiles={
-            <>
-              <CategoryTile
-                label={t("dishes.anyMood")}
-                emoji="✨"
-                selected={mood === null}
-                onPress={() => setMood(null)}
-              />
-              {PERSONALITY_MOODS.map((option) => (
-                <CategoryTile
-                  key={option.id}
-                  label={t(MOOD_KEYS[option.id])}
-                  emoji={option.emoji}
-                  selected={mood === option.id}
-                  onPress={() => setMood(option.id)}
-                />
-              ))}
-            </>
-          }
-        >
-          <DishRecommendationRail
-            loading={moodPicks.isLoading}
-            error={moodPicks.isError}
-            items={moodDishes}
-            onRetry={() => void moodPicks.refetch()}
-          />
-          <PlaceRail
-            loading={moodPicks.isLoading}
-            error={moodPicks.isError}
-            items={moodPlaces}
-            onRetry={() => void moodPicks.refetch()}
-          />
-        </BrowseSection>
-
-        <BrowseSection
-          title={t("browse.weatherTitle")}
-          subtitle={
-            live.weatherCategory === null && weatherOverride === null
-              ? t("dishes.weatherFallback")
-              : t("browse.weatherSubtitle")
-          }
-          tiles={
-            <>
-              <CategoryTile
-                label={t("dishes.weatherAuto")}
-                emoji="📍"
-                selected={weatherOverride === null}
-                onPress={() => setWeatherOverride(null)}
-              />
-              {WEATHER_OPTIONS.map((option) => (
-                <CategoryTile
-                  key={option.value}
-                  label={t(WEATHER_KEYS[option.value])}
-                  emoji={option.emoji}
-                  selected={weatherOverride === option.value}
-                  onPress={() => setWeatherOverride(option.value)}
-                />
-              ))}
-            </>
-          }
-        >
-          <DishRecommendationRail
-            loading={weatherPicks.isLoading}
-            error={weatherPicks.isError}
-            items={weatherDishes}
-            onRetry={() => void weatherPicks.refetch()}
-          />
-          <PlaceRail
-            loading={weatherPicks.isLoading}
-            error={weatherPicks.isError}
-            items={weatherPlaces}
-            onRetry={() => void weatherPicks.refetch()}
-          />
-        </BrowseSection>
-
-        <BrowseSection
-          title={t("browse.locationTitle")}
-          subtitle={t("browse.locationSubtitle")}
-          tiles={
-            <>
-              <CategoryTile
-                label={t("browse.nearMe")}
-                emoji="📍"
-                selected={activeAreaSlug === null}
-                disabled={!nearMeAvailable}
-                onPress={() => setAreaSlug(null)}
-              />
-              {areaList.map((area) => (
-                <CategoryTile
-                  key={area.slug}
-                  label={displayName(lang, { name: area.nameAr, nameEn: area.nameEn })}
-                  emoji="⌖"
-                  badge={String(area.restaurantCount)}
-                  selected={activeAreaSlug === area.slug}
-                  onPress={() => setAreaSlug(area.slug)}
-                />
-              ))}
-            </>
-          }
-        >
-          <Rail
-            label={t("browse.dishes")}
-            count={areaDishCards.length}
-            loading={areaDishes.isLoading}
-            error={areaDishes.isError}
-            empty={t("browse.noDishes")}
-            onRetry={() => void areaDishes.refetch()}
-          >
-            {areaDishCards.map((dish) => (
-              <DishCard key={dish.id} dish={dish} className="w-[196px]" />
-            ))}
-          </Rail>
-          <PlaceRail
-            loading={areaPlaces.isLoading || areas.isLoading}
-            error={areaPlaces.isError}
-            items={areaPlaceCards}
-            onRetry={() => {
-              void areaPlaces.refetch();
-              void areas.refetch();
-            }}
-          />
-        </BrowseSection>
-      </ScrollView>
-    </View>
-  );
-}
-
-function BrowseSection({
-  title,
-  subtitle,
-  tiles,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  tiles: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <View className="gap-3">
-      <View className="px-5 gap-0.5">
-        <Text className="text-[18px] leading-6 font-bold text-brand-50">{title}</Text>
-        <Text className="text-xs text-cream-mute">{subtitle}</Text>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
-      >
-        {tiles}
-      </ScrollView>
-
-      {children}
-    </View>
-  );
-}
-
-/** One labelled horizontal rail with its loading/empty/error states. */
-function Rail({
-  label,
-  count,
-  loading,
-  error,
-  empty,
-  onRetry,
-  children,
-}: {
-  label: string;
-  count: number;
-  loading: boolean;
-  error: boolean;
-  empty: string;
-  onRetry: () => void;
-  children: ReactNode;
-}) {
-  const t = useT();
-
-  return (
-    <View className="gap-2">
-      <View className="flex-row items-center justify-between px-5">
-        <Text className="text-[11px] font-semibold uppercase tracking-[0.12em] text-accent">
-          {label}
-        </Text>
-        {count > 0 ? (
-          <Text className="text-[11px] font-semibold tabular-nums text-cream-mute">
-            {count}
-          </Text>
-        ) : null}
-      </View>
-
-      {loading ? (
-        <View className="flex-row items-center gap-2 px-5 py-3">
-          <ActivityIndicator color={COLORS.amber} />
-          <Text className="text-xs text-cream-mute">{t("browse.loading")}</Text>
-        </View>
-      ) : error ? (
-        <View className="mx-4 flex-row items-center justify-between gap-3 rounded-2xl border border-danger-line bg-danger-bg px-4 py-3">
-          <Text className="flex-1 text-xs leading-4 text-danger">
-            {t("personality.unavailable")}
-          </Text>
           <Pressable
-            accessibilityRole="button"
-            onPress={onRetry}
-            className="rounded-xl border border-danger-line px-3 py-1.5 active:opacity-75"
+            onPress={() => router.push("/profile")}
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 21,
+              backgroundColor: COLORS.panel,
+              borderWidth: 1,
+              borderColor: COLORS.line,
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 2px 10px rgba(126,16,57,0.10)",
+            }}
           >
-            <Text className="text-[11px] font-semibold text-danger">
-              {t("common.retry")}
-            </Text>
+            <Image
+              source={tabIcon("profile", COLORS.amberCta, 22)}
+              style={{ width: 22, height: 22 }}
+            />
           </Pressable>
         </View>
-      ) : count === 0 ? (
-        <View className="mx-4 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3">
-          <Text className="text-xs text-cream-mute">{empty}</Text>
+
+        {/* ── Greeting ── */}
+        <View style={{ paddingHorizontal: 20, paddingBottom: 20, gap: 2 }}>
+          <Text
+            style={{
+              fontSize: 14,
+              color: COLORS.dim,
+              fontWeight: "500",
+            }}
+          >
+            {live.city ? `📍 ${live.city}  ` : ""}
+            {clock.clock}  👋
+          </Text>
+          <Text
+            style={{
+              fontSize: 30,
+              fontWeight: "800",
+              color: COLORS.cream,
+              lineHeight: 36,
+            }}
+          >
+            {greetingLine}{"\n"}
+            <Text style={{ color: COLORS.amber }}>
+              {t("browse.title")}
+            </Text>
+            !
+          </Text>
         </View>
-      ) : (
+
+        {/* ── Search Bar — deep wine pill from the reference ── */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginHorizontal: 20,
+            marginBottom: 22,
+            height: 48,
+            borderRadius: 24,
+            backgroundColor: COLORS.amberCta,
+            paddingHorizontal: 16,
+            gap: 10,
+            boxShadow: "0 4px 14px rgba(126,16,57,0.28)",
+          }}
+        >
+          <Image
+            source={tabIcon("search", COLORS.night, 18)}
+            style={{ width: 18, height: 18 }}
+          />
+          <TextInput
+            value={searchText}
+            onChangeText={setSearchText}
+            placeholder={t("dishes.searchPlaceholder")}
+            placeholderTextColor={COLORS.searchPlaceholder}
+            style={{
+              flex: 1,
+              fontSize: 14,
+              color: COLORS.night,
+            }}
+            returnKeyType="search"
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          <Pressable
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 17,
+              backgroundColor: "rgba(255,255,255,0.16)",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Image
+              source={tabIcon("filter", COLORS.night, 16)}
+              style={{ width: 16, height: 16 }}
+            />
+          </Pressable>
+        </View>
+
+        {/* ── Weather / Recommendations Section ── */}
+        <HomeSectionHeader
+          title={t("browse.weatherTitle")}
+          subtitle={live.tempC !== null ? `${live.tempC}°C` : undefined}
+          onViewAll={() => {}}
+        />
+        <View style={{ height: 14 }} />
+
+        {/* Weather chips */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, gap: 12, alignItems: "stretch" }}
+          contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingBottom: 14 }}
         >
-          {children}
+          <WeatherChip
+            label={t("dishes.weatherAuto")}
+            emoji="📍"
+            selected={weatherOverride === null}
+            onPress={() => setWeatherOverride(null)}
+          />
+          {WEATHER_OPTIONS.map((option) => (
+            <WeatherChip
+              key={option.value}
+              label={t(WEATHER_KEYS[option.value])}
+              emoji={option.emoji}
+              selected={weatherOverride === option.value}
+              onPress={() => setWeatherOverride(option.value)}
+            />
+          ))}
         </ScrollView>
-      )}
+
+        {weatherPicks.isLoading ? (
+          <LoadingRow />
+        ) : weatherPicks.isError ? (
+          <ErrorRow onRetry={() => void weatherPicks.refetch()} />
+        ) : weatherDishes.length === 0 ? (
+          <EmptyRow message={t("browse.noDishes")} />
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}
+          >
+            {weatherDishes.slice(0, 8).map((item) => (
+              <PopularDishCard key={item.dish.id} item={item} />
+            ))}
+          </ScrollView>
+        )}
+
+        <View style={{ height: 30 }} />
+
+        {/* ── Near Me / Area Section ── */}
+        <HomeSectionHeader
+          title={t("browse.locationTitle")}
+          subtitle={activeArea ? displayName(lang, { name: activeArea.nameAr, nameEn: activeArea.nameEn }) : undefined}
+          onViewAll={() => {}}
+        />
+        <View style={{ height: 14 }} />
+
+        {/* Area chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingBottom: 14 }}
+        >
+          <WeatherChip
+            label={t("browse.nearMe")}
+            emoji="📍"
+            selected={activeAreaSlug === null}
+            disabled={!nearMeAvailable}
+            onPress={() => setAreaSlug(null)}
+          />
+          {areaList.map((area) => (
+            <WeatherChip
+              key={area.slug}
+              label={displayName(lang, { name: area.nameAr, nameEn: area.nameEn })}
+              emoji="⌖"
+              selected={activeAreaSlug === area.slug}
+              onPress={() => setAreaSlug(area.slug)}
+            />
+          ))}
+        </ScrollView>
+
+        {/* Dishes in area */}
+        {areaDishes.isLoading ? (
+          <LoadingRow />
+        ) : areaDishes.isError ? (
+          <ErrorRow onRetry={() => void areaDishes.refetch()} />
+        ) : areaDishCards.length === 0 ? (
+          <EmptyRow message={t("browse.noDishes")} />
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}
+          >
+            {areaDishCards.map((dish) => (
+              <DishCard key={dish.id} dish={dish} className="w-[160px]" />
+            ))}
+          </ScrollView>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
-function DishRecommendationRail({
-  items,
-  loading,
-  error,
-  onRetry,
+// ──────────────────────────────────────────────────────────────────
+// Sub-components
+// ──────────────────────────────────────────────────────────────────
+
+function HomeSectionHeader({
+  title,
+  subtitle,
+  onViewAll,
 }: {
-  items: RecommendationItem[];
-  loading: boolean;
-  error: boolean;
-  onRetry: () => void;
+  title: string;
+  subtitle?: string;
+  onViewAll: () => void;
 }) {
-  const t = useT();
   return (
-    <Rail
-      label={t("browse.dishes")}
-      count={items.length}
-      loading={loading}
-      error={error}
-      empty={t("browse.noDishes")}
-      onRetry={onRetry}
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingHorizontal: 20,
+      }}
     >
-      {items.map((item) => (
-        <RecommendationCard key={item.dish.id} item={item} className="w-[286px]" />
-      ))}
-    </Rail>
+      <View style={{ gap: 1 }}>
+        <Text style={{ fontSize: 18, fontWeight: "800", color: COLORS.cream }}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={{ fontSize: 11, color: COLORS.mute }}>{subtitle}</Text>
+        ) : null}
+      </View>
+      <Pressable onPress={onViewAll} hitSlop={8}>
+        <Text style={{ fontSize: 12, fontWeight: "700", color: COLORS.amber }}>
+          View All
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
-function PlaceRail({
-  items,
-  loading,
-  error,
-  onRetry,
-}: {
-  items: RestaurantCardItem[];
-  loading: boolean;
-  error: boolean;
-  onRetry: () => void;
-}) {
-  const t = useT();
+/**
+ * Popular dish card — white card with food photo on top, name, price, and
+ * crimson + button. Matches the "Popular Now" cards in the reference.
+ */
+function PopularDishCard({ item }: { item: RecommendationItem }) {
+  const lang = useLang();
+  const { dish } = item;
+  const name = displayName(lang, dish);
+
   return (
-    <Rail
-      label={t("browse.places")}
-      count={items.length}
-      loading={loading}
-      error={error}
-      empty={t("browse.noPlaces")}
-      onRetry={onRetry}
+    <Pressable
+      onPress={() => router.push({ pathname: "/dish/[id]", params: { id: dish.id } })}
+      style={{
+        width: 160,
+        borderRadius: 18,
+        backgroundColor: COLORS.panel,
+        overflow: "hidden",
+        boxShadow: CARD_SHADOW,
+      }}
     >
-      {items.map((item) => (
-        <RestaurantCard key={item.id} item={item} className="w-[286px]" />
-      ))}
-    </Rail>
+      {/* Photo */}
+      <View style={{ width: "100%", height: 120, backgroundColor: COLORS.raised }}>
+        {dish.imageUrl ? (
+          <Image
+            source={{ uri: dish.imageUrl }}
+            style={{ width: "100%", height: 120 }}
+            contentFit="cover"
+            transition={200}
+          />
+        ) : (
+          <View
+            style={{
+              width: "100%",
+              height: 120,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ fontSize: 44 }}>🍽</Text>
+          </View>
+        )}
+        {/* Heart icon overlay */}
+        <View
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: COLORS.pillOnPhoto,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Image
+            source={tabIcon("favourites", COLORS.amber, 14)}
+            style={{ width: 14, height: 14 }}
+          />
+        </View>
+        {/* Taste badge */}
+        {dish.tasteAttributes.length > 0 ? (
+          <View
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 8,
+              backgroundColor: COLORS.wine,
+              borderRadius: 8,
+              paddingHorizontal: 7,
+              paddingVertical: 3,
+            }}
+          >
+            <Text style={{ fontSize: 9, fontWeight: "700", color: COLORS.onCardTag }}>
+              {dish.tasteAttributes[0].toLowerCase().replace(/_/g, " ")}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Info row */}
+      <View style={{ padding: 10, gap: 3 }}>
+        <Text
+          numberOfLines={2}
+          style={{
+            fontSize: 13,
+            fontWeight: "700",
+            color: COLORS.cream,
+            lineHeight: 17,
+          }}
+        >
+          {name}
+        </Text>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginTop: 4,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "800",
+              color: COLORS.amber,
+            }}
+          >
+            {dish.price
+              ? `${dish.currency === "EGP" ? "EGP " : ""}${dish.price}`
+              : "—"}
+          </Text>
+          <View
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 14,
+              backgroundColor: COLORS.amber,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ fontSize: 18, color: COLORS.night, fontWeight: "700", lineHeight: 20 }}>
+              +
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
-function CategoryTile({
+function WeatherChip({
   label,
   emoji,
-  badge,
   selected,
   disabled,
   onPress,
 }: {
   label: string;
   emoji: string;
-  badge?: string;
   selected: boolean;
   disabled?: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected, disabled }}
-      disabled={disabled}
       onPress={onPress}
-      className={cn(
-        "flex-row items-center gap-1.5 rounded-full border px-3 py-2.5 active:opacity-80",
-        selected ? "border-brand-cta bg-brand-cta" : "border-ink-700 bg-ink-900",
-        disabled ? "opacity-40" : ""
-      )}
-      style={{ borderCurve: "continuous" }}
+      disabled={disabled}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        borderRadius: 20,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        backgroundColor: selected ? COLORS.amber : COLORS.panel,
+        borderWidth: 1.5,
+        borderColor: selected ? COLORS.amber : COLORS.line,
+        opacity: disabled ? 0.4 : 1,
+        boxShadow: selected ? "0 3px 10px rgba(192,36,92,0.25)" : undefined,
+      }}
     >
-      <Text className="text-sm">{emoji}</Text>
+      <Text style={{ fontSize: 14 }}>{emoji}</Text>
       <Text
-        className={cn(
-          "text-xs",
-          selected ? "font-bold text-night" : "font-medium text-cream"
-        )}
+        style={{
+          fontSize: 12,
+          fontWeight: selected ? "700" : "500",
+          color: selected ? COLORS.night : COLORS.dim,
+        }}
       >
         {label}
       </Text>
-      {badge ? (
-        <View
-          className={cn(
-            "rounded-full px-1.5",
-            selected ? "bg-night/10" : "bg-ink-950"
-          )}
-        >
-          <Text
-            className={cn(
-              "text-[10px] font-semibold tabular-nums",
-              selected ? "text-night" : "text-cream-mute"
-            )}
-          >
-            {badge}
-          </Text>
-        </View>
-      ) : null}
     </Pressable>
+  );
+}
+
+function LoadingRow() {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+      }}
+    >
+      <ActivityIndicator color={COLORS.amber} />
+      <Text style={{ fontSize: 12, color: COLORS.mute }}>Loading…</Text>
+    </View>
+  );
+}
+
+function ErrorRow({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View
+      style={{
+        marginHorizontal: 20,
+        borderRadius: 14,
+        padding: 14,
+        backgroundColor: COLORS.dangerBg,
+        borderWidth: 1,
+        borderColor: COLORS.dangerLine,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+      }}
+    >
+      <Text style={{ fontSize: 12, color: COLORS.dangerText, flex: 1 }}>
+        Couldn't load. Tap to retry.
+      </Text>
+      <Pressable
+        onPress={onRetry}
+        style={{
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          borderRadius: 10,
+          backgroundColor: COLORS.raised,
+        }}
+      >
+        <Text style={{ fontSize: 11, fontWeight: "700", color: COLORS.cream }}>
+          Retry
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function EmptyRow({ message }: { message: string }) {
+  return (
+    <View
+      style={{
+        marginHorizontal: 20,
+        borderRadius: 14,
+        padding: 14,
+        backgroundColor: COLORS.panel,
+        borderWidth: 1,
+        borderColor: COLORS.line,
+      }}
+    >
+      <Text style={{ fontSize: 12, color: COLORS.mute }}>{message}</Text>
+    </View>
   );
 }

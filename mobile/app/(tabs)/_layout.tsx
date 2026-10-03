@@ -1,31 +1,185 @@
+import { useEffect, useRef } from "react";
+import { Animated, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { Pressable, Text, View } from "react-native";
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { cn } from "@/lib/cn";
 import { tabIcon } from "@/components/tab-icons";
-import { useT } from "@/i18n";
-import { AI_BUTTON_GLOW, COLORS } from "@/lib/theme";
+import { useLang } from "@/i18n";
+import { COLORS } from "@/lib/theme";
 import { useKeyboardVisible } from "@/lib/use-keyboard-visible";
 
+/** Standalone AI Floating Tab Button (Alone from the rest of the tabs). */
+function AITabButton({
+  focused,
+  onPress,
+  label,
+}: {
+  focused: boolean;
+  onPress: () => void;
+  label: string;
+}) {
+  const scaleAnim = useRef(new Animated.Value(focused ? 1.05 : 1)).current;
+
+  useEffect(() => {
+    Animated.spring(scaleAnim, {
+      toValue: focused ? 1.05 : 1,
+      useNativeDriver: true,
+      friction: 6,
+      tension: 100,
+    }).start();
+  }, [focused, scaleAnim]);
+
+  return (
+    <View
+      style={{
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: focused ? COLORS.amberCta : COLORS.panel,
+        borderWidth: 1.5,
+        borderColor: focused ? COLORS.amber : COLORS.line,
+        elevation: 6,
+        shadowColor: "#2A0F1C",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        overflow: "hidden",
+      }}
+    >
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityState={{ selected: focused }}
+        style={{
+          width: "100%",
+          height: "100%",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Animated.View
+          style={{
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 2,
+            transform: [{ scale: scaleAnim }],
+          }}
+        >
+          <Image
+            source={tabIcon("ai", focused ? COLORS.night : COLORS.amber, 20)}
+            style={{ width: 20, height: 20 }}
+            accessibilityLabel="AI"
+          />
+          <Text
+            numberOfLines={1}
+            style={{
+              fontSize: 9.5,
+              fontWeight: "800",
+              color: focused ? COLORS.night : COLORS.amber,
+              letterSpacing: 0.3,
+              textTransform: "uppercase",
+            }}
+          >
+            {label}
+          </Text>
+        </Animated.View>
+      </Pressable>
+    </View>
+  );
+}
+
+/** Main Tab Item inside the floating capsule. */
+function MainTabItem({
+  focused,
+  onPress,
+  label,
+  iconName,
+}: {
+  focused: boolean;
+  onPress: () => void;
+  label: string;
+  iconName: string;
+}) {
+  const scaleAnim = useRef(new Animated.Value(focused ? 1.05 : 1)).current;
+
+  useEffect(() => {
+    Animated.spring(scaleAnim, {
+      toValue: focused ? 1.05 : 1,
+      useNativeDriver: true,
+      friction: 6,
+      tension: 100,
+    }).start();
+  }, [focused, scaleAnim]);
+
+  const activeColor = COLORS.amber;
+  const idleColor = COLORS.mute;
+
+  return (
+    <View
+      style={{
+        flex: 1,
+        height: "100%",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingHorizontal: 2,
+      }}
+    >
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityState={{ selected: focused }}
+        style={{
+          width: "100%",
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: focused ? COLORS.wine : "transparent",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Animated.View
+          style={{
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 2,
+            transform: [{ scale: scaleAnim }],
+          }}
+        >
+          <Image
+            source={tabIcon(iconName, focused ? activeColor : idleColor, 20)}
+            style={{ width: 20, height: 20 }}
+          />
+          <Text
+            numberOfLines={1}
+            style={{
+              fontSize: 9.5,
+              fontWeight: focused ? "700" : "500",
+              color: focused ? activeColor : idleColor,
+              letterSpacing: 0.1,
+            }}
+          >
+            {label}
+          </Text>
+        </Animated.View>
+      </Pressable>
+    </View>
+  );
+}
+
 /**
- * Tab bar matching the Paper design: a glowing amber spark button floating
- * beside a warm shell pill holding the other tabs, with a wine-tinted
- * active slot.
+ * Custom Floating Tab Bar:
+ * - Standalone AI button on the left (isolated from the other tabs)
+ * - Rounded floating capsule on the right holding Personality, Explore, Loved
+ * - Floats ~5px from the bottom with Android elevation & iOS shadows
  */
 function CustomTabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets();
+  const lang = useLang();
   const keyboardVisible = useKeyboardVisible();
   const routes: Array<{ key: string; name: string }> = state.routes;
-  const index: number = state.index;
-  const spark = routes.find((r) => r.name === "ai");
-  const rest = routes.filter((r) => r.name !== "ai");
-  const sparkFocused = spark ? index === routes.indexOf(spark) : false;
+  const currentRouteName = routes[state.index]?.name;
 
-  // The keyboard covers this area anyway — hiding avoids the bar riding up
-  // with the Android adjustResize window shrink. Only the focused input
-  // area should rise.
   if (keyboardVisible) return null;
 
   function goTo(name: string, focused: boolean) {
@@ -39,59 +193,84 @@ function CustomTabBar({ state, navigation }: any) {
     }
   }
 
+  const TAB_LABELS: Record<string, string> = {
+    ai: "AI",
+    personality: lang === "ar" ? "شخصيتي" : "Personality",
+    index: lang === "ar" ? "استكشف" : "Explore",
+    favourites: lang === "ar" ? "المفضلة" : "Loved",
+  };
+
+  const TAB_ICON_NAMES: Record<string, string> = {
+    ai: "ai",
+    personality: "personality",
+    index: "index",
+    favourites: "favourites",
+  };
+
+  const aiRoute = routes.find((r) => r.name === "ai");
+  const isAIFocused = currentRouteName === "ai";
+
+  // Ordered list of the rest of the tabs
+  const mainTabNames = ["personality", "index", "favourites"];
+  const mainRoutes = mainTabNames
+    .map((name) => routes.find((r) => r.name === name))
+    .filter(Boolean) as Array<{ key: string; name: string }>;
+
   return (
     <View
-      className="absolute left-0 right-0 flex-row items-center px-4 gap-3"
-      style={{ bottom: insets.bottom + 12 }}
+      style={{
+        position: "absolute",
+        left: 14,
+        right: 14,
+        bottom: insets.bottom > 0 ? insets.bottom + 5 : 6,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        zIndex: 50,
+      }}
     >
-      {spark ? (
-        <Pressable
-          onPress={() => goTo(spark.name, sparkFocused)}
-          accessibilityRole="button"
-          className={cn(
-            "w-[66px] h-[66px] rounded-full items-center justify-center border",
-            sparkFocused
-              ? "bg-brand-300 border-brand-200"
-              : "bg-brand-500 border-brand-200/60"
-          )}
-          style={{ boxShadow: AI_BUTTON_GLOW }}
-        >
-          <Image
-            source={tabIcon("ai", COLORS.onAmber, 26)}
-            style={{ width: 26, height: 26 }}
-            accessibilityLabel="AI chef"
-          />
-        </Pressable>
+      {/* ── Standalone AI Tab (Alone from the rest of the tabs) ── */}
+      {aiRoute ? (
+        <AITabButton
+          focused={isAIFocused}
+          onPress={() => goTo("ai", isAIFocused)}
+          label={TAB_LABELS.ai}
+        />
       ) : null}
 
+      {/* ── Main Floating Capsule: Personality, Explore, Loved ── */}
       <View
-        className="flex-1 flex-row items-center h-[66px] rounded-full border-[1.5px]"
         style={{
-          backgroundColor: COLORS.shell,
-          borderColor: COLORS.shellLine,
-          boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.55)",
+          flex: 1,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: COLORS.panel,
+          borderWidth: 1.5,
+          borderColor: COLORS.line,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: 4,
+          elevation: 6,
+          shadowColor: "#2A0F1C",
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.12,
+          shadowRadius: 8,
         }}
       >
-        {rest.map((route) => {
-          const focused = index === routes.indexOf(route);
+        {mainRoutes.map((route) => {
+          const focused = currentRouteName === route.name;
+          const label = TAB_LABELS[route.name] ?? route.name;
+          const iconName = TAB_ICON_NAMES[route.name] ?? route.name;
+
           return (
-            <Pressable
+            <MainTabItem
               key={route.key}
+              focused={focused}
               onPress={() => goTo(route.name, focused)}
-              accessibilityRole="button"
-              className={cn(
-                "flex-1 items-center justify-center h-[54px] rounded-full mx-0.5",
-                focused && "bg-shell-active"
-              )}
-            >
-              <Image
-                source={tabIcon(
-                  route.name,
-                  focused ? COLORS.iconOn : COLORS.iconIdle
-                )}
-                style={{ width: 24, height: 24 }}
-              />
-            </Pressable>
+              label={label}
+              iconName={iconName}
+            />
           );
         })}
       </View>
@@ -100,19 +279,41 @@ function CustomTabBar({ state, navigation }: any) {
 }
 
 export default function TabsLayout() {
-  const t = useT();
+  const lang = useLang();
 
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        animation: "fade",
       }}
+      initialRouteName="index"
     >
-      <Tabs.Screen name="index" options={{ title: t("home.discover") }} />
-      <Tabs.Screen name="personality" options={{ title: t("personality.title") }} />
-      <Tabs.Screen name="favourites" options={{ title: t("favourites.saved") }} />
-      <Tabs.Screen name="ai" options={{ title: t("ai.chefOnline") }} />
+      <Tabs.Screen
+        name="ai"
+        options={{
+          title: "AI",
+        }}
+      />
+      <Tabs.Screen
+        name="personality"
+        options={{
+          title: lang === "ar" ? "شخصيتي" : "Personality",
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: lang === "ar" ? "استكشف" : "Explore",
+        }}
+      />
+      <Tabs.Screen
+        name="favourites"
+        options={{
+          title: lang === "ar" ? "المفضلة" : "Loved",
+        }}
+      />
     </Tabs>
   );
 }

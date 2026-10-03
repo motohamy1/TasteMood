@@ -153,7 +153,7 @@ export default function ProfileScreen() {
             <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
               {t("profile.youGuest")}
             </Text>
-            <Text className="text-2xl font-bold text-brand-50">{t("profile.title")}</Text>
+            <Text className="text-2xl font-bold text-cream">{t("profile.title")}</Text>
           </View>
 
           <View className="bg-ink-900 border border-ink-700 rounded-2xl p-4 flex-row items-center gap-3">
@@ -225,7 +225,7 @@ export default function ProfileScreen() {
           <Text className="text-[10px] font-semibold uppercase tracking-[0.12em] text-accent">
             {t("profile.youPreferences")}
           </Text>
-          <Text className="text-2xl font-bold text-brand-50">{t("profile.title")}</Text>
+          <Text className="text-2xl font-bold text-cream">{t("profile.title")}</Text>
         </View>
 
         <View className="bg-ink-900 border border-ink-700 rounded-2xl p-4 flex-row items-center gap-3">

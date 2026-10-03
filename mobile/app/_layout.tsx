@@ -69,7 +69,7 @@ export default function RootLayout() {
               options={{
                 headerShown: false,
                 presentation: "card",
-                contentStyle: { backgroundColor: "#0A0A0A" },
+                contentStyle: { backgroundColor: COLORS.ink950 },
               }}
             />
             <Stack.Screen
@@ -123,11 +123,11 @@ export default function RootLayout() {
               }}
             />
           </Stack>
-          {/* Translucent + transparent so the warm ink950 ground draws
+          {/* Translucent + transparent so the blush ground draws
               behind the clock/wifi/battery icons instead of a solid
-              system strip. Icons stay light via barStyle. */}
+              system strip. Icons stay dark via barStyle. */}
           <StatusBar
-            barStyle="light-content"
+            barStyle="dark-content"
             translucent
             backgroundColor="transparent"
           />

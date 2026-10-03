@@ -5,12 +5,9 @@ import { Pressable } from "react-native";
 import { tabIcon } from "@/components/tab-icons";
 import { COLORS } from "@/lib/theme";
 
-/** Soft single-layer amber halo — matches the Paper header button. */
-const PROFILE_BUTTON_GLOW = "0 2px 14px rgba(221, 150, 58, 0.27)";
-
 /**
- * Amber profile shortcut shown in the top-right of every tab screen's
- * header — profile is no longer a tab of its own.
+ * Profile avatar button for screen headers — white frosted circle with a
+ * deep-wine icon, matching the reference's light header buttons.
  */
 export function ProfileButton() {
   return (
@@ -18,12 +15,21 @@ export function ProfileButton() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Open profile"
-        className="w-10 h-10 rounded-full bg-brand-500 border border-brand-200/60 items-center justify-center active:opacity-85 shrink-0"
-        style={{ boxShadow: PROFILE_BUTTON_GLOW }}
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: 21,
+          backgroundColor: COLORS.panel,
+          borderWidth: 1,
+          borderColor: COLORS.line,
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 2px 10px rgba(126,16,57,0.10)",
+        }}
         hitSlop={8}
       >
         <Image
-          source={tabIcon("profile", COLORS.onAmber, 22)}
+          source={tabIcon("profile", COLORS.amberCta, 22)}
           style={{ width: 22, height: 22 }}
         />
       </Pressable>

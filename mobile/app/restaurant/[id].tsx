@@ -17,6 +17,7 @@ import { displayName, pickLabel, useLang, useT } from "@/i18n";
 import { cn } from "@/lib/cn";
 import { formatDistance } from "@/lib/format";
 import { COLORS } from "@/lib/theme";
+import { tabIcon } from "@/components/tab-icons";
 import type { TranslationKey } from "@/i18n/dictionaries";
 
 const PRICE_KEYS: Record<string, TranslationKey> = {
@@ -27,10 +28,8 @@ const PRICE_KEYS: Record<string, TranslationKey> = {
 };
 
 /**
- * Place detail: what the directory knows about a restaurant — its branches,
- * contact/atmosphere facts and the dishes published for it. Everything shown
- * comes from source data; a place without a published menu shows that instead
- * of an invented one.
+ * Place detail — light wine system.
+ * Edge-to-edge cover photo, frosted back button, info sheet below.
  */
 export default function RestaurantDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -41,7 +40,7 @@ export default function RestaurantDetailsScreen() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-ink-950">
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.ink950 }}>
         <Stack.Screen options={{ title: t("restaurant.loading") }} />
         <ActivityIndicator size="large" color={COLORS.amber} />
       </View>
@@ -50,20 +49,29 @@ export default function RestaurantDetailsScreen() {
 
   if (isError || !place) {
     return (
-      <View className="flex-1 items-center justify-center bg-ink-950 px-6">
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.ink950, paddingHorizontal: 24 }}>
         <Stack.Screen options={{ title: t("restaurant.notFound") }} />
-        <Text className="text-5xl mb-2">🍽</Text>
-        <Text className="text-lg font-semibold text-cream text-center">
+        <Text style={{ fontSize: 48, marginBottom: 8 }}>🍽</Text>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: COLORS.cream, textAlign: "center" }}>
           {t("restaurant.notFoundTitle")}
         </Text>
-        <Text className="text-sm text-cream-mute text-center mt-1">
+        <Text style={{ fontSize: 13, color: COLORS.mute, textAlign: "center", marginTop: 4 }}>
           {(error as Error)?.message ?? t("restaurant.notFoundDesc")}
         </Text>
         <Pressable
           onPress={() => refetch()}
-          className="mt-4 px-4 py-2 rounded-full bg-brand-cta active:opacity-80"
+          style={{
+            marginTop: 16,
+            paddingHorizontal: 20,
+            paddingVertical: 10,
+            borderRadius: 20,
+            backgroundColor: COLORS.amberCta,
+            boxShadow: "0 4px 12px rgba(126,16,57,0.30)",
+          }}
         >
-          <Text className="text-night text-sm font-bold">{t("common.retry")}</Text>
+          <Text style={{ fontSize: 14, fontWeight: "700", color: COLORS.night }}>
+            {t("common.retry")}
+          </Text>
         </Pressable>
       </View>
     );
@@ -75,87 +83,125 @@ export default function RestaurantDetailsScreen() {
     : null;
 
   return (
-    <View className="flex-1 bg-ink-950 overflow-hidden">
-      <AmbientGlow top={80} />
-      <Stack.Screen options={{ title: name }} />
+    <View style={{ flex: 1, backgroundColor: COLORS.ink950, overflow: "hidden" }}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Hero photo */}
+      <View style={{ height: 280, backgroundColor: COLORS.raised }}>
+        {place.coverImageUrl ? (
+          <Image
+            source={{ uri: place.coverImageUrl }}
+            style={{ width: "100%", height: 280 }}
+            contentFit="cover"
+            transition={200}
+          />
+        ) : (
+          <View style={{ width: "100%", height: 280, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ fontSize: 64 }}>🍽</Text>
+          </View>
+        )}
+
+        {/* Back button */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("common.back")}
+          onPress={() => router.back()}
+          style={{
+            position: "absolute",
+            top: insets.top + 8,
+            left: 16,
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            backgroundColor: COLORS.pillOnPhoto,
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(43,5,21,0.18)",
+          }}
+        >
+          <Image
+            source={tabIcon("back", COLORS.amberCta, 18)}
+            style={{ width: 18, height: 18 }}
+          />
+        </Pressable>
+      </View>
+
       <ScrollView
-        className="flex-1 bg-transparent"
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        style={{ flex: 1, marginTop: -30 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Info sheet */}
         <View
-          className="flex-row items-center gap-2 px-4"
-          style={{ paddingTop: insets.top + 8 }}
+          style={{
+            backgroundColor: COLORS.ink950,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            paddingTop: 20,
+            paddingHorizontal: 20,
+            gap: 0,
+          }}
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("common.back")}
-            onPress={() => router.back()}
-            className="w-9 h-9 rounded-full bg-ink-900 border border-ink-700 items-center justify-center active:opacity-75"
-          >
-            <Text className="text-[14px] text-cream">←</Text>
-          </Pressable>
+          {/* Name + cuisine tags */}
           <Text
-            numberOfLines={1}
-            className="flex-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-cream-mute"
+            style={{
+              fontSize: 24,
+              fontWeight: "800",
+              color: COLORS.cream,
+              lineHeight: 28,
+              marginBottom: 10,
+            }}
           >
-            {t("restaurant.place")}
-            {areaLabel ? ` • ${areaLabel}` : ""}
+            {name}
           </Text>
-        </View>
 
-        <View className="px-4 mt-3">
-          <View className="rounded-2xl overflow-hidden bg-wine-deep border border-ink-700">
-            {place.coverImageUrl ? (
-              <Image
-                source={{ uri: place.coverImageUrl }}
-                className="w-full h-48"
-                contentFit="cover"
-                transition={200}
-              />
-            ) : (
-              <View className="w-full h-48 items-center justify-center">
-                <Text className="text-6xl">🍽</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        <View className="px-4 pt-4 gap-4">
-          <View className="gap-1.5">
-            <Text className="text-[22px] font-bold text-brand-50 leading-[26px]">
-              {name}
-            </Text>
-            <View className="flex-row flex-wrap items-center gap-1.5">
-              {place.cuisines.map((cuisine) => (
-                <View key={cuisine.slug} className="bg-wine px-2.5 py-1 rounded-full">
-                  <Text className="text-[11px] font-semibold text-cream">
-                    {pickLabel(lang, cuisine.name, cuisine.nameAr ?? undefined)}
-                  </Text>
-                </View>
-              ))}
-              <View className="bg-neutral-chip px-2.5 py-1 rounded-full">
-                <Text className="text-[11px] font-semibold text-cream">
-                  {t(PRICE_KEYS[place.priceRange] ?? "price.moderate")}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 14 }}>
+            {place.cuisines.map((cuisine) => (
+              <View
+                key={cuisine.slug}
+                style={{
+                  backgroundColor: COLORS.amber,
+                  borderRadius: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "700", color: COLORS.night }}>
+                  {pickLabel(lang, cuisine.name, cuisine.nameAr ?? undefined)}
                 </Text>
               </View>
-              <Text className="text-[11px] text-cream-mute">
-                {t("browse.branchCount", { count: place.branchesCount })}
+            ))}
+            <View
+              style={{
+                backgroundColor: COLORS.panel,
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderWidth: 1,
+                borderColor: COLORS.line,
+              }}
+            >
+              <Text style={{ fontSize: 11, fontWeight: "600", color: COLORS.dim }}>
+                {t(PRICE_KEYS[place.priceRange] ?? "price.moderate")}
               </Text>
             </View>
+            <Text style={{ fontSize: 11, color: COLORS.mute }}>
+              {t("browse.branchCount", { count: place.branchesCount })}
+            </Text>
           </View>
 
           {place.description ? (
-            <Text className="text-[13px] text-cream-dim leading-5">
+            <Text style={{ fontSize: 13, lineHeight: 20, color: COLORS.dim, marginBottom: 20 }}>
               {place.description}
             </Text>
           ) : null}
 
-          <View className="gap-2">
-            <Text className="text-[18px] leading-6 font-bold text-brand-50">
-              {t("restaurant.branches")}
-            </Text>
+          {/* Branches */}
+          <Text style={{ fontSize: 18, fontWeight: "800", color: COLORS.cream, marginBottom: 12 }}>
+            {t("restaurant.branches")}
+          </Text>
+
+          <View style={{ gap: 10, marginBottom: 24 }}>
             {place.branches.map((branch) => {
               const branchArea = branch.area
                 ? pickLabel(lang, branch.area.nameEn, branch.area.nameAr)
@@ -170,59 +216,83 @@ export default function RestaurantDetailsScreen() {
               return (
                 <View
                   key={branch.id}
-                  className="bg-ink-900 border border-ink-700 rounded-2xl p-3 gap-1.5"
-                  style={{ borderCurve: "continuous" }}
+                  style={{
+                    backgroundColor: COLORS.panel,
+                    borderWidth: 1,
+                    borderColor: COLORS.line,
+                    borderRadius: 18,
+                    padding: 14,
+                    gap: 6,
+                  }}
                 >
-                  <View className="flex-row items-center justify-between gap-2">
-                    <Text numberOfLines={1} className="flex-1 text-[13px] font-bold text-cream">
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <Text
+                      numberOfLines={1}
+                      style={{ flex: 1, fontSize: 14, fontWeight: "700", color: COLORS.cream }}
+                    >
                       {branch.name || name}
                       {branchArea ? ` · ${branchArea}` : ""}
-                    </Text>
-                    <Text
-                      className={cn(
-                        "text-[10px] font-bold",
-                        branch.isOpen === true
-                          ? "text-success-ink"
-                          : branch.isOpen === false
-                            ? "text-danger"
-                            : "text-cream-mute"
-                      )}
-                    >
+                    </Text>                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: "700",
+                          color:
+                            branch.isOpen === true
+                              ? COLORS.successText
+                              : branch.isOpen === false
+                              ? COLORS.dangerText
+                              : COLORS.mute,
+                        }}
+                      >
                       {t(
                         branch.isOpen === true
                           ? "card.openNow"
                           : branch.isOpen === false
-                            ? "card.closedNow"
-                            : "card.hoursUnknown"
+                          ? "card.closedNow"
+                          : "card.hoursUnknown"
                       )}
                     </Text>
                   </View>
 
-                  <Text className="text-[11px] leading-4 text-cream-mute">
+                  <Text style={{ fontSize: 11, lineHeight: 16, color: COLORS.mute }}>
                     {branch.address}
                     {distance ? ` · ${distance}` : ""}
                   </Text>
 
                   {branch.atmospheres.length > 0 ? (
-                    <View className="flex-row flex-wrap gap-1">
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
                       {branch.atmospheres.map((atmosphere) => (
                         <View
                           key={atmosphere}
-                          className="bg-neutral-chip px-2 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: COLORS.raised,
+                            borderRadius: 8,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                          }}
                         >
-                          <Text className="text-[10px] text-cream">{atmosphere}</Text>
+                          <Text style={{ fontSize: 10, color: COLORS.dim }}>
+                            {atmosphere}
+                          </Text>
                         </View>
                       ))}
                     </View>
                   ) : null}
 
-                  <View className="flex-row items-center gap-2 pt-0.5">
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
                     <Pressable
                       onPress={() => void Linking.openURL(mapUrl)}
                       accessibilityRole="button"
-                      className="rounded-xl border border-ink-700 px-2.5 py-1.5 active:opacity-75"
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 7,
+                        borderRadius: 12,
+                        backgroundColor: COLORS.raised,
+                        borderWidth: 1,
+                        borderColor: COLORS.line,
+                      }}
                     >
-                      <Text className="text-[10px] font-semibold text-accent">
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: COLORS.accentText }}>
                         ⌖ {t("card.viewOnMap")}
                       </Text>
                     </Pressable>
@@ -230,9 +300,16 @@ export default function RestaurantDetailsScreen() {
                       <Pressable
                         onPress={() => void Linking.openURL(`tel:${branch.phone}`)}
                         accessibilityRole="button"
-                        className="rounded-xl border border-ink-700 px-2.5 py-1.5 active:opacity-75"
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 7,
+                          borderRadius: 12,
+                          backgroundColor: COLORS.raised,
+                          borderWidth: 1,
+                          borderColor: COLORS.line,
+                        }}
                       >
-                        <Text className="text-[10px] font-semibold text-cream">
+                        <Text style={{ fontSize: 11, fontWeight: "600", color: COLORS.dim }}>
                           {branch.phone}
                         </Text>
                       </Pressable>
@@ -243,29 +320,38 @@ export default function RestaurantDetailsScreen() {
             })}
           </View>
 
-          <View className="gap-2">
-            <Text className="text-[18px] leading-6 font-bold text-brand-50">
-              {t("restaurant.dishesHere")}
-            </Text>
-            {place.dishes.length === 0 ? (
-              <View className="bg-ink-900 border border-ink-700 rounded-2xl p-4 gap-1">
-                <Text className="text-[13px] font-semibold text-cream">
-                  {t("restaurant.noDishes")}
-                </Text>
-                <Text className="text-[12px] leading-4 text-cream-mute">
-                  {t("restaurant.noDishesDesc")}
-                </Text>
-              </View>
-            ) : (
-              <View className="flex-row flex-wrap gap-2.5">
-                {place.dishes.map((dish) => (
-                  <View key={dish.id} className="basis-[48%] flex-1">
-                    <DishCard dish={dish} />
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+          {/* Dishes */}
+          <Text style={{ fontSize: 18, fontWeight: "800", color: COLORS.cream, marginBottom: 12 }}>
+            {t("restaurant.dishesHere")}
+          </Text>
+
+          {place.dishes.length === 0 ? (
+            <View
+              style={{
+                backgroundColor: COLORS.panel,
+                borderWidth: 1,
+                borderColor: COLORS.line,
+                borderRadius: 18,
+                padding: 16,
+                gap: 4,
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "600", color: COLORS.cream }}>
+                {t("restaurant.noDishes")}
+              </Text>
+              <Text style={{ fontSize: 12, lineHeight: 16, color: COLORS.mute }}>
+                {t("restaurant.noDishesDesc")}
+              </Text>
+            </View>
+          ) : (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+              {place.dishes.map((dish) => (
+                <View key={dish.id} style={{ width: "47%" }}>
+                  <DishCard dish={dish} />
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>

@@ -1,13 +1,15 @@
 import { Linking, Pressable, Text, View } from "react-native";
+import { Image } from "expo-image";
 import { Link } from "expo-router";
 
 import type { RecommendationItem } from "@/types/recommendation";
 import type { InteractionType } from "@/types/interaction";
-import { DishPhoto } from "@/components/dish-photo";
 import { cn } from "@/lib/cn";
 import { foodEmoji } from "@/lib/food-emoji";
 import { displayName, useLang, useT } from "@/i18n";
 import { formatDistance, formatPrice } from "@/lib/format";
+import { CARD_SHADOW, COLORS } from "@/lib/theme";
+import { tabIcon } from "@/components/tab-icons";
 
 interface Props {
   item: RecommendationItem;
@@ -41,59 +43,127 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
 
   return (
     <View
-      className={cn(
-        "bg-brand-50 border border-cardline rounded-2xl overflow-hidden",
-        className
-      )}
-      style={{ borderCurve: "continuous" }}
+      className={cn("overflow-hidden", className)}
+      style={{
+        borderRadius: 18,
+        backgroundColor: COLORS.panel,
+        boxShadow: CARD_SHADOW,
+      }}
     >
       <Link href={{ pathname: "/dish/[id]", params: { id: dish.id } }} asChild>
-        <Pressable className="flex-row active:opacity-80">
-          <DishPhoto
-            uri={dish.imageUrl}
-            emoji={foodEmoji(dish)}
-            className="w-[108px] min-h-[132px]"
-            emojiSize={34}
-            accessibilityLabel={`${name} photo`}
-          />
+        <Pressable style={{ flexDirection: "row" }} className="active:opacity-80">
+          {/* Photo */}
+          <View
+            style={{
+              width: 108,
+              minHeight: 120,
+              backgroundColor: COLORS.raised,
+            }}
+          >
+            {dish.imageUrl ? (
+              <Image
+                source={{ uri: dish.imageUrl }}
+                style={{ width: 108, minHeight: 120 }}
+                contentFit="cover"
+                transition={200}
+                accessibilityLabel={`${name} photo`}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 108,
+                  minHeight: 120,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontSize: 36 }}>{foodEmoji(dish)}</Text>
+              </View>
+            )}
+            {/* Taste badge */}
+            {dish.tasteAttributes.length > 0 ? (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  left: 8,
+                  backgroundColor: COLORS.wine,
+                  borderRadius: 7,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                }}
+              >
+                <Text style={{ fontSize: 8, fontWeight: "700", color: COLORS.onCardTag }}>
+                  {dish.tasteAttributes[0].toLowerCase().replace(/_/g, " ")}
+                </Text>
+              </View>
+            ) : null}
+          </View>
 
-          <View className="flex-1 min-w-0 p-3 gap-1.5">
-            <Text numberOfLines={2} className="text-[15px] leading-5 font-bold text-oncard">
+          {/* Info */}
+          <View style={{ flex: 1, minWidth: 0, padding: 12, gap: 5 }}>
+            <Text
+              numberOfLines={2}
+              style={{
+                fontSize: 15,
+                lineHeight: 20,
+                fontWeight: "700",
+                color: COLORS.cream,
+              }}
+            >
               {name}
             </Text>
-            <Text numberOfLines={1} className="text-xs font-semibold text-oncard-muted">
+            <Text
+              numberOfLines={1}
+              style={{ fontSize: 11, fontWeight: "600", color: COLORS.mute }}
+            >
               {restaurantName}
               {branch?.name ? ` · ${branch.name}` : ""}
             </Text>
 
             {branch?.address ? (
-              <Text numberOfLines={2} className="text-[11px] leading-4 text-oncard-muted">
+              <Text
+                numberOfLines={2}
+                style={{ fontSize: 10, lineHeight: 14, color: COLORS.mute }}
+              >
                 {branch.address}
               </Text>
             ) : null}
 
-            <View className="flex-row flex-wrap items-center gap-1.5 pt-0.5">
-              <Text className="text-[14px] leading-5 font-extrabold text-oncard-price">
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginTop: 4,
+              }}
+            >
+              <Text
+                style={{ fontSize: 14, lineHeight: 20, fontWeight: "800", color: COLORS.amber }}
+              >
                 {formatPrice(dish.price, dish.currency)}
               </Text>
-              {isEstimated ? (
-                <View className="px-1.5 py-0.5 rounded-full border border-cardline">
-                  <Text className="text-[9px] font-semibold text-oncard-muted">
-                    {t("dish.estimated")}
-                  </Text>
-                </View>
-              ) : null}
-              {dish.status === "ACTIVE" ? (
-                <View className="px-1.5 py-0.5 rounded-full border border-cardline">
-                  <Text className="text-[9px] font-semibold text-oncard-muted">
-                    {t("card.menuListed")}
-                  </Text>
-                </View>
-              ) : null}
+              <View
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 13,
+                  backgroundColor: COLORS.amber,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ fontSize: 16, color: COLORS.night, fontWeight: "700", lineHeight: 18 }}>
+                  +
+                </Text>
+              </View>
             </View>
 
             {reason ? (
-              <Text numberOfLines={2} className="text-[11px] leading-[15px] text-oncard-tag">
+              <Text
+                numberOfLines={2}
+                style={{ fontSize: 10, lineHeight: 14, color: COLORS.accentText, fontStyle: "italic" }}
+              >
                 {reason}
               </Text>
             ) : null}
@@ -101,19 +171,34 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
         </Pressable>
       </Link>
 
-      <View className="flex-row items-center justify-between border-t border-cardline px-3 py-2">
-        <View className="flex-1 flex-row flex-wrap items-center gap-2">
+      {/* Bottom meta row */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderTopWidth: 1,
+          borderTopColor: COLORS.line,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+        }}
+      >
+        <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
           {branch?.isOpen === true ? (
-            <Text className="text-[10px] font-bold text-success-ink">{t("card.openNow")}</Text>
+            <Text style={{ fontSize: 10, fontWeight: "700", color: COLORS.successText }}>
+              {t("card.openNow")}
+            </Text>
           ) : branch?.isOpen === false ? (
-            <Text className="text-[10px] font-bold text-danger">{t("card.closedNow")}</Text>
+            <Text style={{ fontSize: 10, fontWeight: "700", color: COLORS.dangerText }}>
+              {t("card.closedNow")}
+            </Text>
           ) : (
-            <Text className="text-[10px] font-medium text-oncard-muted">
+            <Text style={{ fontSize: 10, color: COLORS.mute }}>
               {t("card.hoursUnknown")}
             </Text>
           )}
           {distance ? (
-            <Text className="text-[10px] text-oncard-muted">· {distance}</Text>
+            <Text style={{ fontSize: 10, color: COLORS.mute }}>· {distance}</Text>
           ) : null}
         </View>
 
@@ -121,31 +206,35 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
           <Pressable
             onPress={() => void Linking.openURL(mapUrl)}
             accessibilityRole="button"
-            accessibilityLabel={t("card.viewOnMap")}
-            className="rounded-xl border border-cardline px-2.5 py-1.5 active:opacity-80"
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: COLORS.line,
+            }}
           >
-            <Text className="text-[10px] font-semibold text-oncard">⌖ {t("card.viewOnMap")}</Text>
+            <Text style={{ fontSize: 10, fontWeight: "600", color: COLORS.accentText }}>
+              ⌖ {t("card.viewOnMap")}
+            </Text>
           </Pressable>
         ) : null}
 
         {onFeedback ? (
-          <View className="flex-row items-center gap-2 pl-2">
-            <Text className="text-[9px] text-oncard-muted">{t("card.fitYourMood")}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 8 }}>
             <Pressable
               onPress={() => onFeedback("LIKE")}
               hitSlop={6}
               accessibilityRole="button"
-              accessibilityLabel={`Like ${name}`}
             >
-              <Text className="text-[14px]">👍</Text>
+              <Text style={{ fontSize: 14 }}>👍</Text>
             </Pressable>
             <Pressable
               onPress={() => onFeedback("DISLIKE")}
               hitSlop={6}
               accessibilityRole="button"
-              accessibilityLabel={`Dislike ${name}`}
             >
-              <Text className="text-[14px]">👎</Text>
+              <Text style={{ fontSize: 14 }}>👎</Text>
             </Pressable>
           </View>
         ) : null}

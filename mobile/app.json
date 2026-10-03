@@ -6,12 +6,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "androidStatusBar": {
-      "backgroundColor": "#100706",
-      "barStyle": "light-content",
+      "backgroundColor": "#FBF5F7",
+      "barStyle": "dark-content",
       "translucent": true
     },
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,

@@ -6,6 +6,8 @@ import type { DishSummary } from "@/types/dish";
 import { cn } from "@/lib/cn";
 import { displayName, useLang, useT } from "@/i18n";
 import { formatPrice } from "@/lib/format";
+import { CARD_SHADOW, COLORS } from "@/lib/theme";
+import { tabIcon } from "@/components/tab-icons";
 
 interface Props {
   dish: DishSummary;
@@ -25,68 +27,128 @@ export function DishCard({ dish, className }: Props) {
     >
       <Pressable
         className={cn(
-          "bg-brand-50 border border-cardline rounded-2xl overflow-hidden",
-          "active:opacity-80",
+          "overflow-hidden active:opacity-80",
           className
         )}
-        style={{ borderCurve: "continuous" }}
+        style={{
+          borderRadius: 18,
+          backgroundColor: COLORS.panel,
+          boxShadow: CARD_SHADOW,
+        }}
       >
-        <Image
-          source={{ uri: dish.imageUrl }}
-          className="w-full h-[88px] bg-wine-deep"
-          contentFit="cover"
-          transition={200}
-          accessibilityLabel={`${name} photo`}
-        />
+        {/* Photo */}
+        <View
+          style={{ width: "100%", height: 110, backgroundColor: COLORS.raised }}
+        >
+          {dish.imageUrl ? (
+            <Image
+              source={{ uri: dish.imageUrl }}
+              style={{ width: "100%", height: 110 }}
+              contentFit="cover"
+              transition={200}
+              accessibilityLabel={`${name} photo`}
+            />
+          ) : (
+            <View
+              style={{
+                width: "100%",
+                height: 110,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 44 }}>🍽</Text>
+            </View>
+          )}
 
-        <View className="p-2.5 gap-0.5">
+          {/* Taste badge */}
+          {dish.tasteAttributes.length > 0 ? (
+            <View
+              style={{
+                position: "absolute",
+                top: 8,
+                left: 8,
+                backgroundColor: COLORS.wine,
+                borderRadius: 8,
+                paddingHorizontal: 7,
+                paddingVertical: 3,
+              }}
+            >
+              <Text style={{ fontSize: 9, fontWeight: "700", color: COLORS.onCardTag }}>
+                {dish.tasteAttributes[0].toLowerCase().replace(/_/g, " ")}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Info */}
+        <View style={{ padding: 10, gap: 3 }}>
           <Text
             numberOfLines={1}
-            className="text-[13px] font-bold text-oncard"
+            style={{
+              fontSize: 13,
+              fontWeight: "700",
+              color: COLORS.cream,
+            }}
           >
             {name}
           </Text>
 
-          <Text numberOfLines={1} className="text-[10px] text-oncard-muted">
+          <Text
+            numberOfLines={1}
+            style={{ fontSize: 10, color: COLORS.mute }}
+          >
             {displayName(lang, { name: dish.restaurantName, nameEn: dish.restaurantNameEn })}
             {dish.branchName ? ` · ${dish.branchName}` : ""}
           </Text>
 
-          <View className="flex-row items-center gap-1.5 mt-0.5">
-            <Text className="text-[13px] font-extrabold text-oncard-price">
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginTop: 4,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: "800",
+                color: COLORS.amber,
+              }}
+            >
               {formatPrice(dish.price, dish.currency)}
             </Text>
 
-            {isEstimated ? (
-              <View className="px-1.5 py-px rounded-full border border-cardline">
-                <Text className="text-[8px] font-semibold text-oncard-muted">
-                  {t("dish.estimated")}
-                </Text>
-              </View>
-            ) : null}
-
-            {typeof dish.rating === "number" ? (
-              <Text className="text-[10px] text-oncard-muted">
-                ★ {dish.rating.toFixed(1)}
-                {dish.reviewCount && dish.reviewCount > 0 ? ` (${dish.reviewCount})` : ""}
+            <View
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 13,
+                backgroundColor: COLORS.amber,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  color: COLORS.night,
+                  fontWeight: "700",
+                  lineHeight: 18,
+                }}
+              >
+                +
               </Text>
-            ) : null}
+            </View>
           </View>
 
-          {dish.tasteAttributes.length > 0 && (
-            <View className="flex-row flex-wrap gap-1 mt-1">
-              {dish.tasteAttributes.slice(0, 3).map((tag) => (
-                <View
-                  key={tag}
-                  className="px-1.5 py-px rounded-full border border-clay-100"
-                >
-                  <Text className="text-[9px] text-oncard-tag font-semibold">
-                    {tag.toLowerCase().replace(/_/g, " ")}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
+          {typeof dish.rating === "number" ? (
+            <Text style={{ fontSize: 10, color: COLORS.mute, marginTop: 1 }}>
+              ★ {dish.rating.toFixed(1)}
+              {dish.reviewCount && dish.reviewCount > 0 ? ` (${dish.reviewCount})` : ""}
+            </Text>
+          ) : null}
         </View>
       </Pressable>
     </Link>

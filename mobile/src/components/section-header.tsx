@@ -2,6 +2,7 @@ import { Link } from "expo-router";
 import { Text, View } from "react-native";
 
 import { useT } from "@/i18n";
+import { COLORS } from "@/lib/theme";
 
 interface Props {
   title: string;
@@ -9,16 +10,16 @@ interface Props {
   actionHref?: string;
 }
 
-/** Screen section header: bold title, "See all" link. */
+/** Screen section header: bold title on dark, orange "See all" link. */
 export function SectionHeader({ title, actionLabel, actionHref }: Props) {
   const t = useT();
 
   return (
-    <View className="flex-row items-center justify-between">
-      <Text className="text-base font-bold text-cream">{title}</Text>
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+      <Text style={{ fontSize: 17, fontWeight: "800", color: COLORS.cream }}>{title}</Text>
       {actionHref ? (
         <Link href={actionHref as never} asChild>
-          <Text className="text-xs font-semibold text-accent">
+          <Text style={{ fontSize: 12, fontWeight: "700", color: COLORS.amber }}>
             {actionLabel ?? t("common.seeAll")}
           </Text>
         </Link>
