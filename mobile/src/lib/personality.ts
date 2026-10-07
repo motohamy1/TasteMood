@@ -134,6 +134,8 @@ export interface PersonalityMetadata {
   coreAnswers?: Partial<Record<"dietary" | "cuisine" | "mealType" | "spice" | "discovery", string>>;
   coreCompleted?: boolean;
   followUpShownDate?: string;
+  /** Day the "Know you better" probe was dismissed; honored for that day. */
+  probeDismissedDate?: string;
   guestMergeIds?: string[];
 }
 
@@ -151,6 +153,7 @@ export function getPersonalityMetadata(
     if (typeof source[key] === "boolean") metadata[key] = source[key];
   }
   if (typeof source.followUpShownDate === "string") metadata.followUpShownDate = source.followUpShownDate;
+  if (typeof source.probeDismissedDate === "string") metadata.probeDismissedDate = source.probeDismissedDate;
   if (Array.isArray(source.guestMergeIds)) {
     metadata.guestMergeIds = source.guestMergeIds.filter((id): id is string => typeof id === "string");
   }

@@ -11,6 +11,8 @@
 
 import type { Dish, DishSummary } from "@/types/dish";
 import type {
+  PairTasteRequest,
+  PairTasteResponse,
   RecommendationRequest,
   RecommendationResponse,
 } from "@/types/recommendation";
@@ -198,6 +200,18 @@ export function getRestaurant(id: string) {
 
 export function getRecommendations(payload: RecommendationRequest) {
   return request<RecommendationResponse>("/recommendations", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+/**
+ * Pair-taste ("Which of these two sounds more you tonight?"). Optional auth:
+ * a guest posts an empty body and still receives a generic pair — never a 401.
+ * The chosen item is recorded through the ordinary interaction endpoint.
+ */
+export function getPairTaste(payload: PairTasteRequest = {}) {
+  return request<PairTasteResponse>("/pair-taste", {
     method: "POST",
     body: payload,
   });

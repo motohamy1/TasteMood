@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   useMyPreferences,
+  usePairTaste,
   useRecommendations,
   useRestaurantAreas,
   useUpdateMyPreferences,
@@ -60,6 +61,12 @@ import {
 import { useGuestProfileStore } from "@/lib/guest-profile-store";
 import { nearestArea } from "@/lib/browse-groups";
 import { orderByLearnedAffinity } from "@/lib/personality-ranking";
+import {
+  isProbeDismissedForToday,
+  pendingProbe,
+  probeDismissedDate,
+  type ProbeTopic,
+} from "@/lib/personality-probe";
 import { RecommendationCard } from "@/components/recommendation-card";
 import { ProfileButton } from "@/components/profile-button";
 import { DishSkeletonGrid } from "@/components/dish-skeleton";
@@ -68,14 +75,18 @@ import { AmbientGlow } from "@/components/ambient-glow";
 import { cn } from "@/lib/cn";
 import { COLORS } from "@/lib/theme";
 import { pickLabel, useLang, useT } from "@/i18n";
+import { buildTraitBars, resolveTraitVector, type TraitId } from "@/lib/personality-traits";
 import { recordInteraction } from "@/lib/api";
+import { whyLine } from "@/lib/personality-why";
+import { pairAnswerInput, shouldOfferPair } from "@/lib/personality-pair";
 import type {
+  PairTasteResponse,
   PersonalityContext,
   RecommendationItem,
   RecommendationRequest,
 } from "@/types/recommendation";
 import type { DietaryProperty, MealCharacteristic } from "@/types/dish";
-import type { UserPreferences } from "@/types/user";
+import type { UserPreferences, PriceRange } from "@/types/user";
 import type { InteractionType } from "@/types/interaction";
 import type { TranslationKey } from "@/i18n/dictionaries";
 
@@ -131,6 +142,25 @@ const FOLLOW_UP_LABEL: Record<CoreQuestionId, TranslationKey> = {
   discovery: "personality.stepDiscovery",
 };
 
+/**
+ * "Know you better" probe topics read in the user's language. The dimension
+ * topics reuse the same vocabulary as the follow-up labels and trait bars so
+ * the screen never shows a raw enum key ("tasteAttribute").
+ */
+const PROBE_TOPIC_LABEL: Record<ProbeTopic, TranslationKey> = {
+  budget: "personality.probeBudgetQuestion",
+  cuisine: "personality.traitBreadth",
+  tasteAttribute: "personality.stepTaste",
+  mealCharacteristic: "personality.stepMeals",
+};
+
+const PROBE_BUDGET_OPTIONS: Array<{ value: PriceRange; labelKey: TranslationKey }> = [
+  { value: "BUDGET", labelKey: "price.budget" },
+  { value: "MODERATE", labelKey: "price.moderate" },
+  { value: "EXPENSIVE", labelKey: "price.expensive" },
+  { value: "LUXURY", labelKey: "price.luxury" },
+];
+
 interface AppliedSnapshot {
   profile: string;
   mood: string | null;
@@ -181,20 +211,65 @@ function ToggleChip({
   );
 }
 
-function TraitBar({ label, pct }: { label: string; pct: number }) {
+function TraitBar({
+  label,
+  pct,
+  confidence,
+  confidenceLabel,
+  expanded,
+  onToggle,
+  sourcesLabel,
+  sourceLines,
+  ctaLabel,
+}: {
+  label: string;
+  pct: number;
+  confidence: "measured" | "low-signal";
+  confidenceLabel: string;
+  expanded: boolean;
+  onToggle: () => void;
+  sourcesLabel: string;
+  sourceLines: string[];
+  ctaLabel: string;
+}) {
   const clamped = Math.max(4, Math.min(100, pct));
   return (
-    <View className="gap-1">
-      <View className="flex-row justify-between">
-        <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.1em] text-cream-mute">
-          {label}
-        </Text>
+    <Pressable onPress={onToggle} hitSlop={4} className="gap-1">
+      <View className="flex-row justify-between items-center">
+        <View className="flex-row items-center gap-1.5">
+          <View
+            className={confidence === "measured" ? "w-1.5 h-1.5 rounded-full bg-success" : "w-1.5 h-1.5 rounded-full bg-clay-400"}
+            accessibilityLabel={confidenceLabel}
+          />
+          <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.1em] text-cream-mute">
+            {label}
+          </Text>
+        </View>
         <Text className="text-[9px] leading-[12px] font-bold text-cream">{clamped}%</Text>
       </View>
       <View className="h-[4px] rounded-[2px] bg-ink-700 overflow-hidden">
         <View className="h-[4px] rounded-[2px] bg-brand-500" style={{ width: `${clamped}%` }} />
       </View>
-    </View>
+      {expanded ? (
+        <View className="gap-1 pt-1">
+          <Text className="text-[10px] leading-[13px] font-semibold text-cream">
+            {sourcesLabel} · {confidenceLabel}
+          </Text>
+          {sourceLines.map((line) => (
+            <Text key={line} className="text-[10px] leading-[13px] text-cream-mute">
+              {line}
+            </Text>
+          ))}
+          {confidence === "low-signal" ? (
+            <Link href="/profile" asChild>
+              <Pressable hitSlop={4}>
+                <Text className="text-[10px] leading-[13px] font-semibold text-accent">{ctaLabel}</Text>
+              </Pressable>
+            </Link>
+          ) : null}
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -341,6 +416,63 @@ function CoreQuiz({
 
 type FeedbackType = Extract<InteractionType, "LIKE" | "DISLIKE" | "NOT_INTERESTED">;
 
+interface PairTasteCardProps {
+  pair: [RecommendationItem, RecommendationItem];
+  onChoose: (item: RecommendationItem) => void;
+  onSkip: () => void;
+  chosen: boolean;
+}
+
+/**
+ * "Which of these two sounds more you tonight?" — two real, verified-
+ * available cards from the pair-taste endpoint. One tap records the pick as
+ * an ordinary LIKE (a recommendation signal, never a stable preference) and
+ * retires the card; skipping is frictionless. Fully dismissible, and its
+ * absence never affects the main recommendations.
+ */
+function PairTasteCard({ pair, onChoose, onSkip, chosen }: PairTasteCardProps) {
+  const t = useT();
+  return (
+    <View className="px-4">
+      <View className="bg-wine border border-wine-deep rounded-2xl p-3.5 gap-3">
+        <View className="flex-row items-start justify-between gap-2">
+          <View className="gap-1 flex-1">
+            <Text className="text-[13px] leading-[16px] font-bold text-cream">
+              {t("personality.pairTitle")}
+            </Text>
+            <Text className="text-[11px] leading-[15px] text-cream-mute">
+              {chosen ? t("personality.pairChosen") : t("personality.pairSubtitle")}
+            </Text>
+          </View>
+          <Pressable onPress={onSkip} hitSlop={8}>
+            <Text className="text-[10px] font-semibold text-accent">
+              {t("personality.pairSkip")}
+            </Text>
+          </Pressable>
+        </View>
+        {!chosen ? (
+          <View className="flex-row gap-2.5">
+            {pair.map((item) => (
+              <View key={item.dish.id} className="flex-1">
+                <RecommendationCard
+                  item={item}
+                  onFeedback={(type) => {
+                    // A pair has no "dislike" meaning — the two cards are a
+                    // binary choice. LIKE picks; DISLIKE declines the whole
+                    // pair rather than silently discarding the tap.
+                    if (type === "LIKE") onChoose(item);
+                    else onSkip();
+                  }}
+                />
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 interface RecommendationResultsProps {
   isLoading: boolean;
   isError: boolean;
@@ -353,6 +485,7 @@ interface RecommendationResultsProps {
   onIgnoreWeather: () => void;
   feedback: Record<string, InteractionType>;
   onFeedback?: (item: RecommendationItem, type: FeedbackType) => void;
+  context: PersonalityContext;
 }
 
 function RecommendationResults({
@@ -367,8 +500,10 @@ function RecommendationResults({
   onIgnoreWeather,
   feedback,
   onFeedback,
+  context,
 }: RecommendationResultsProps) {
   const t = useT();
+  const lang = useLang();
 
   return (
     <>
@@ -403,6 +538,9 @@ function RecommendationResults({
                   item={item}
                   onFeedback={onFeedback ? (type) => onFeedback(item, type) : undefined}
                 />
+                <Text className="text-[10px] leading-[13px] text-cream-mute mt-1" numberOfLines={2}>
+                  {whyLine(item.scoreBreakdown, item, context, lang)}
+                </Text>
                 {feedback[item.dish.id] ? <Text className="text-[9px] text-accent text-center mt-1">{t("personality.signalSaved")}</Text> : null}
               </View>
             ))}
@@ -455,6 +593,9 @@ export default function PersonalityScreen() {
   const [setupError, setSetupError] = useState<string | null>(null);
   const [dietaryDraft, setDietaryDraft] = useState<DietaryProperty[]>([]);
   const [feedback, setFeedback] = useState<Record<string, InteractionType>>({});
+  const [expandedTrait, setExpandedTrait] = useState<TraitId | null>(null);
+  const [pairDismissed, setPairDismissed] = useState(false);
+  const [pairAnswered, setPairAnswered] = useState(false);
   const mergeAttempted = useRef(false);
 
   const guestPreferences = guestProfile
@@ -467,6 +608,38 @@ export default function PersonalityScreen() {
   const profileStatus = getProfileCompleteness(effectivePrefs);
   const metadata = getPersonalityMetadata(effectivePrefs);
   const discoveryPreference: DiscoveryPreference = metadata.discoveryPreference ?? "FAMILIAR";
+  // One resolved vector for the bars and the probe: signed-in users read the
+  // server profile's learned vector, guests the on-device session vector. Both
+  // must agree, or the probe would ask about a dimension the bars already show
+  // as measured (and vice versa).
+  const resolvedVector = useMemo(
+    () =>
+      resolveTraitVector(
+        isSignedIn,
+        session.tasteVector,
+        (effectivePrefs?.inferredPreferences as { tasteVector?: unknown } | null | undefined)?.tasteVector
+      ),
+    [isSignedIn, session.tasteVector, effectivePrefs]
+  );
+  const traitBars = useMemo(
+    () =>
+      buildTraitBars({
+        vector: resolvedVector,
+        spicePreference: effectivePrefs?.spicePreference,
+        preferredCuisines: effectivePrefs?.preferredCuisines,
+        preferredMealTypes: effectivePrefs?.preferredMealTypes,
+        discoveryPreference,
+      }),
+    [resolvedVector, effectivePrefs, discoveryPreference]
+  );
+  // Pair-taste hard dietary constraint: signed-in users' restrictions live on
+  // the server profile, but guests' live only on-device, so they must travel
+  // with the request. Passing them for both is harmless — the backend unions
+  // the two sources and dedupes.
+  const pairDiet = useMemo(
+    () => effectivePrefs?.dietaryRestrictions ?? [],
+    [effectivePrefs?.dietaryRestrictions]
+  );
   const weather = session.weatherEnabled
     ? session.weatherOverride ?? live.weatherCategory
     : null;
@@ -499,6 +672,20 @@ export default function PersonalityScreen() {
     followUpQuestion !== null &&
     sessionReady &&
     session.followUpShownDate !== todayKey();
+  // "Know you better" probe card: non-blocking, at most one pending topic,
+  // budget first, hidden once dismissed today or everything is measured.
+  const probe = useMemo(
+    () =>
+      prefsReady && !showCoreQuiz && sessionReady
+        ? pendingProbe(effectivePrefs ?? null, resolvedVector)
+        : null,
+    [prefsReady, showCoreQuiz, sessionReady, effectivePrefs, resolvedVector],
+  );
+  const probeDismissed = isProbeDismissedForToday(
+    probeDismissedDate(isSignedIn ? effectivePrefs : guestPreferences),
+    todayKey(),
+  );
+  const showProbe = probe !== null && !probeDismissed && !showFollowUp;
 
   useEffect(() => {
     setSessionReady(false);
@@ -593,6 +780,20 @@ export default function PersonalityScreen() {
     : false;
 
   const recommendation = useRecommendations(showCoreQuiz ? null : submitted);
+  // Pair-taste is fetched only once the page is past the core quiz and the
+  // user hasn't dismissed it, so the extra request never runs needlessly and
+  // never competes with the main recommendations. An answered pair keeps its
+  // data (stale, non-refetching) so the card can show its "Noted" state.
+  const pairEnabled = !showCoreQuiz && submitted !== null && !pairDismissed;
+  const pair = usePairTaste(pairEnabled ? submitted : null, pairDiet);
+  const pairData = pair.data as PairTasteResponse | undefined;
+  const showPair =
+    pairEnabled &&
+    shouldOfferPair({
+      pair: pairData?.pair,
+      dismissed: pairDismissed,
+      showCoreQuiz,
+    });
   const picks = useMemo(() => {
     const base = dedupe(recommendation.data?.recommendations ?? []).slice(0, 8);
     return isSignedIn
@@ -655,6 +856,37 @@ export default function PersonalityScreen() {
   function guestFeedback(item: RecommendationItem, type: FeedbackType) {
     setFeedback((current) => ({ ...current, [item.dish.id]: type }));
     persistSession(applyPersonalitySignal(session, item, guestFeedbackDelta[type], context));
+  }
+
+  // Pair answer: the chosen dish travels the ordinary feedback path (LIKE) —
+  // signed-in users post it as a recommendation signal, guests fold it into
+  // their local vector. No special-casing, and the card retires either way.
+  function answerPair(item: RecommendationItem) {
+    const answer = pairAnswerInput(item);
+    if (!answer) return;
+    setPairAnswered(true);
+    setFeedback((current) => ({ ...current, [item.dish.id]: "LIKE" }));
+    if (isSignedIn) {
+      void recordInteraction({
+        dishId: answer.dishId,
+        restaurantId: answer.restaurantId,
+        branchId: answer.branchId,
+        interactionType: answer.interactionType,
+        ...(Object.keys(context).length > 0 ? { personalityContext: context } : {}),
+      }).catch(() => {
+        setFeedback((current) => {
+          const next = { ...current };
+          delete next[item.dish.id];
+          return next;
+        });
+      });
+    } else {
+      persistSession(applyPersonalitySignal(session, item, 1, context));
+    }
+  }
+
+  function skipPair() {
+    setPairDismissed(true);
   }
 
   async function saveStablePreference(
@@ -766,6 +998,60 @@ export default function PersonalityScreen() {
       void persistGuestProfile({ ...guestProfile, followUpShownDate: todayKey() });
     } else if (isSignedIn && effectivePrefs) {
       void saveStablePreference({}, { followUpShownDate: todayKey() }, false);
+    }
+  }
+
+  // Budget-ceiling probe answer: saves via the same stable-preference path as
+  // follow-ups (signed-in) or the guest profile persist (guest). Never blocks
+  // recommendations — the card is purely additive. The chosen `preferredPriceRange`
+  // is itself the record of the answer; no separate confirmation flag is kept.
+  async function answerProbeBudget(value: PriceRange) {
+    if (savingSetup || !effectivePrefs) return;
+    setSavingSetup(true);
+    setSetupError(null);
+    try {
+      const patch = { preferredPriceRange: value };
+      if (isSignedIn) {
+        await saveStablePreference(patch, {}, false);
+      } else {
+        const profile = guestProfile ?? emptyGuestPersonalityProfile();
+        const nextProfile: GuestPersonalityProfile = {
+          ...profile,
+          preferences: {
+            ...profile.preferences,
+            ...patch,
+          },
+        };
+        await persistGuestProfile(nextProfile);
+      }
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : t("personality.answerSaveFailed"));
+    } finally {
+      setSavingSetup(false);
+    }
+  }
+
+  // Dismiss retires the probe for the session/day via the metadata date,
+  // mirroring the followUpShownDate/todayKey pattern.
+  function dismissProbe() {
+    const patch = { probeDismissedDate: todayKey() };
+    if (!isSignedIn) {
+      const profile = guestProfile ?? emptyGuestPersonalityProfile();
+      void persistGuestProfile({
+        ...profile,
+        preferences: {
+          ...profile.preferences,
+          inferredPreferences: {
+            ...(profile.preferences.inferredPreferences ?? {}),
+            personality: {
+              ...getPersonalityMetadata(profile.preferences),
+              ...patch,
+            },
+          },
+        },
+      });
+    } else if (effectivePrefs) {
+      void saveStablePreference({}, patch, false);
     }
   }
 
@@ -895,7 +1181,17 @@ export default function PersonalityScreen() {
                 onIgnoreWeather={() => patchSession({ weatherEnabled: false })}
                 feedback={feedback}
                 onFeedback={isSignedIn ? sendFeedback : guestFeedback}
+                context={context}
               />
+
+              {showPair && pairData ? (
+                <PairTasteCard
+                  pair={pairData.pair}
+                  onChoose={answerPair}
+                  onSkip={skipPair}
+                  chosen={pairAnswered}
+                />
+              ) : null}
 
               <View className="px-4">
                 <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-3">
@@ -924,8 +1220,50 @@ export default function PersonalityScreen() {
                   <Text className="text-[11px] leading-[15px] text-cream-mute">
                     {t("personality.tasteSummary", { cuisines: tasteSummary })}
                   </Text>
-                  <TraitBar label={t("personality.heat")} pct={spice * 20} />
-                  <TraitBar label={t("personality.adventure")} pct={cuisines.length * 25 + (discoveryPreference === "CURIOUS" ? 25 : 0)} />
+                  {traitBars.map((bar) => {
+                    const labelKey =
+                      bar.id === "heat"
+                        ? ("personality.heat" as const)
+                        : bar.id === "adventure"
+                          ? ("personality.adventure" as const)
+                          : bar.id === "breadth"
+                            ? ("personality.traitBreadth" as const)
+                            : ("personality.traitMealPattern" as const);
+                    const sourceLines = bar.sources.map((source) =>
+                      source.kind === "signal"
+                        ? t("personality.traitSourceSignal", {
+                            count: String(Math.abs(source.net ?? 0)),
+                            name: source.name,
+                          })
+                        : t("personality.traitSourceSetup", {
+                            name: source.name,
+                            value: source.value ?? "",
+                          })
+                    );
+                    return (
+                      <TraitBar
+                        key={bar.id}
+                        label={t(labelKey)}
+                        pct={bar.pct}
+                        confidence={bar.confidence}
+                        confidenceLabel={t(
+                          bar.confidence === "measured"
+                            ? "personality.traitMeasured"
+                            : "personality.traitLowSignal",
+                          { count: String(bar.signalCount) }
+                        )}
+                        expanded={expandedTrait === bar.id}
+                        onToggle={() => setExpandedTrait((current) => (current === bar.id ? null : bar.id))}
+                        sourcesLabel={t("personality.traitSources")}
+                        sourceLines={sourceLines}
+                        ctaLabel={
+                          bar.confidence === "low-signal"
+                            ? t("personality.traitAdjustSetup")
+                            : t("personality.traitShapeTaste")
+                        }
+                      />
+                    );
+                  })}
                   {!isSignedIn ? (
                     <Link href="/auth" asChild>
                       <Pressable hitSlop={4}>
@@ -1028,6 +1366,51 @@ export default function PersonalityScreen() {
                         ))}
                       </View>
                     )}
+                    {savingSetup ? <ActivityIndicator color={COLORS.amber} /> : null}
+                    {setupError ? <Text className="text-[10px] font-semibold text-danger">{setupError}</Text> : null}
+                  </View>
+                </View>
+              ) : null}
+
+              {showProbe && probe ? (
+                <View className="px-4">
+                  <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-3">
+                    <View className="flex-row items-start justify-between gap-2">
+                      <View className="gap-1 flex-1">
+                        <Text className="text-[13px] font-bold text-cream">
+                          {t("personality.probeTitle")}
+                        </Text>
+                        <Text className="text-[11px] leading-[15px] text-cream-mute">
+                          {probe.topic === "budget"
+                            ? t("personality.probeBudgetHint")
+                            : t("personality.probeDimensionHint", {
+                                part: t(PROBE_TOPIC_LABEL[probe.topic]),
+                              })}
+                        </Text>
+                      </View>
+                      <Pressable onPress={dismissProbe} hitSlop={8}>
+                        <Text className="text-[10px] font-semibold text-accent">
+                          {t("personality.probeSkip")}
+                        </Text>
+                      </Pressable>
+                    </View>
+                    {probe.topic === "budget" ? (
+                      <>
+                        <Text className="text-[12px] leading-[16px] font-semibold text-cream">
+                          {t("personality.probeBudgetQuestion")}
+                        </Text>
+                        <View className="flex-row flex-wrap gap-1.5">
+                          {PROBE_BUDGET_OPTIONS.map((option) => (
+                            <ToggleChip
+                              key={option.value}
+                              label={t(option.labelKey)}
+                              active={effectivePrefs?.preferredPriceRange === option.value}
+                              onPress={() => void answerProbeBudget(option.value)}
+                            />
+                          ))}
+                        </View>
+                      </>
+                    ) : null}
                     {savingSetup ? <ActivityIndicator color={COLORS.amber} /> : null}
                     {setupError ? <Text className="text-[10px] font-semibold text-danger">{setupError}</Text> : null}
                   </View>

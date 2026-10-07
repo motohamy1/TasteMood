@@ -15,9 +15,10 @@ import { menuRoutes } from './modules/menus/routes.js';
 import { dishRoutes } from './modules/dishes/routes.js';
 import { taxonomyRoutes } from './modules/taxonomies/routes.js';
 import { searchRoutes } from './modules/search/routes.js';
-import { preferenceRoutes } from './modules/preferences/routes.js';
-import { interactionRoutes } from './modules/interactions/routes.js';
 import { recommendationRoutes } from './modules/recommendations/routes.js';
+import { interactionRoutes } from './modules/interactions/routes.js';
+import { preferenceRoutes } from './modules/preferences/routes.js';
+import { pairTasteRoutes } from './modules/pair-taste/routes.js';
 import { userRoutes } from './modules/users/routes.js';
 import { adminRoutes } from './modules/admin/routes.js';
 
@@ -62,6 +63,7 @@ export function createApp(): Express {
   app.use(`${env.API_PREFIX}/taxonomies`, taxonomyRoutes);
   app.use(`${env.API_PREFIX}/search`, searchRoutes);
   app.use(`${env.API_PREFIX}/recommendations`, recommendationRoutes);
+  app.use(`${env.API_PREFIX}/pair-taste`, pairTasteRoutes);
   app.use(`${env.API_PREFIX}/interactions`, interactionRoutes);
   app.use(`${env.API_PREFIX}/admin`, adminRoutes);
   app.use(`${env.API_PREFIX}`, preferenceRoutes);

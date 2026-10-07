@@ -117,3 +117,24 @@ export interface RecommendationResponse {
   interpretation: RecommendationInterpretation;
   recommendations: RecommendationItem[];
 }
+
+/**
+ * Mirrors backend/src/modules/pair-taste/schema.ts. Optional auth: guests post
+ * an empty body and receive a generic pair. `dimension` names the lowest-confidence
+ * taste dimension the two dishes differ on.
+ */
+export interface PairTasteRequest {
+  mealSlot?: PersonalityMealSlot;
+  personalityContext?: PersonalityContext;
+  /**
+   * Guest path for the hard dietary constraint: a guest's restrictions live
+   * only on-device, so they travel with the request. Signed-in callers may
+   * omit this — the backend reads them from the server profile.
+   */
+  dietaryRestrictions?: DietaryProperty[];
+}
+
+export interface PairTasteResponse {
+  pair: [RecommendationItem, RecommendationItem];
+  dimension: string;
+}

@@ -17,6 +17,7 @@ import {
   getDish,
   getDishes,
   getMyPreferences,
+  getPairTaste,
   getRecommendations,
   getRestaurant,
   getRestaurantAreas,
@@ -24,8 +25,13 @@ import {
   updateMyPreferences,
   type CuisineOption,
 } from "./api";
-import type { DishSummary } from "@/types/dish";
-import type { RecommendationRequest } from "@/types/recommendation";
+import { pairTasteRequest } from "@/lib/personality-pair";
+import type { DishSummary, DietaryProperty } from "@/types/dish";
+import type {
+  PairTasteRequest,
+  PairTasteResponse,
+  RecommendationRequest,
+} from "@/types/recommendation";
 import type {
   RestaurantArea,
   RestaurantDetail,
@@ -42,6 +48,8 @@ export const queryKeys = {
   cuisines: ["cuisines"] as const,
   recommendations: (req: RecommendationRequest) =>
     ["recommendations", req] as const,
+  pairTaste: (req: PairTasteRequest | null) =>
+    ["pair-taste", req] as const,
   restaurants: (params: RestaurantQuery = {}) =>
     ["restaurants", params] as const,
   restaurantAreas: ["restaurants", "areas"] as const,
@@ -101,6 +109,31 @@ export function useRecommendations(payload: RecommendationRequest | null) {
     queryFn: () => getRecommendations(payload as RecommendationRequest),
     enabled: payload != null,
     staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Pair-taste card data. Fetched lazily: `enabled` stays false until the screen
+ * decides the pair surface should be offered, so the extra request never runs
+ * during the core quiz or after the pair is dismissed. A failed pair request
+ * leaves the rest of the page usable (the caller ignores the error state).
+ *
+ * `dietaryRestrictions` is the guest path for the hard dietary constraint;
+ * signed-in callers pass the profile's value or omit it.
+ */
+export function usePairTaste(
+  payload: RecommendationRequest | null,
+  dietaryRestrictions?: readonly DietaryProperty[],
+  options?: Omit<UseQueryOptions<PairTasteResponse, Error>, "queryKey" | "queryFn">
+) {
+  const request = pairTasteRequest(payload, dietaryRestrictions);
+  return useQuery({
+    queryKey: queryKeys.pairTaste(request ?? null),
+    queryFn: () => getPairTaste(request ?? {}),
+    enabled: request != null,
+    staleTime: 5 * 60_000,
+    retry: false,
+    ...options,
   });
 }
 
