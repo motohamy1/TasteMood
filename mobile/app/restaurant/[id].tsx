@@ -16,6 +16,7 @@ import { useRestaurant } from "@/lib/queries";
 import { displayName, pickLabel, useLang, useT } from "@/i18n";
 import { cn } from "@/lib/cn";
 import { formatDistance } from "@/lib/format";
+import { formatPlaceRating, placeKindLabel } from "@/lib/place-card";
 import { COLORS } from "@/lib/theme";
 import { tabIcon } from "@/components/tab-icons";
 import type { TranslationKey } from "@/i18n/dictionaries";
@@ -81,6 +82,12 @@ export default function RestaurantDetailsScreen() {
   const areaLabel = place.area
     ? pickLabel(lang, place.area.nameEn, place.area.nameAr)
     : null;
+  // WHAT the place is, first; the source's rating only when it has one.
+  const kindLabel = placeKindLabel(place.placeKind, lang);
+  const ratingText = formatPlaceRating(
+    place.branch?.rating ?? null,
+    place.branch?.reviewsCount ?? null
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.ink950, overflow: "hidden" }}>
@@ -156,6 +163,11 @@ export default function RestaurantDetailsScreen() {
           </Text>
 
           <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 14 }}>
+            {kindLabel ? (
+              <Text style={{ fontSize: 11, fontWeight: "800", color: COLORS.accentText }}>
+                {kindLabel}
+              </Text>
+            ) : null}
             {place.cuisines.map((cuisine) => (
               <View
                 key={cuisine.slug}
@@ -188,6 +200,9 @@ export default function RestaurantDetailsScreen() {
             <Text style={{ fontSize: 11, color: COLORS.mute }}>
               {t("browse.branchCount", { count: place.branchesCount })}
             </Text>
+            {ratingText ? (
+              <Text style={{ fontSize: 11, color: COLORS.mute }}>★ {ratingText}</Text>
+            ) : null}
           </View>
 
           {place.description ? (
@@ -209,9 +224,11 @@ export default function RestaurantDetailsScreen() {
               const distance = formatDistance(
                 branch.id === place.branch?.id ? place.distanceMeters : null
               );
-              const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                `${name}, ${branch.address}`
-              )}`;
+              const mapUrl =
+                branch.mapsUrl ??
+                `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                  `${name}, ${branch.address}`
+                )}`;
 
               return (
                 <View

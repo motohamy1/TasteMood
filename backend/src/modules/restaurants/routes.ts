@@ -25,6 +25,13 @@ router.get(
   (req, res, next) => restaurantController.getRestaurantCities(req, res, next)
 );
 
+// Must stay above `/:id`, for the same reason as `/cities`.
+router.get(
+  '/kinds',
+  validate({ query: QueryRestaurantCitySchema }),
+  (req, res, next) => restaurantController.getPlaceKinds(req, res, next)
+);
+
 router.get('/slug/:slug', (req, res, next) =>
   restaurantController.getRestaurantBySlug(req, res, next)
 );

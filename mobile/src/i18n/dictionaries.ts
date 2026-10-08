@@ -50,6 +50,7 @@ export const en = {
   // Moment-led dish discovery
   "dishes.filterPicks": "Filter these picks…",
   "dishes.searchPlaceholder": "Search dishes or places…",
+  "search.clear": "Clear search",
   "dishes.rightNow": "Right now",
   "dishes.contextTitle": "Food that fits this moment",
   "dishes.contextSubtitle": "Guided by the time of day and local weather. Choose a mood to make it yours.",
@@ -93,6 +94,9 @@ export const en = {
   "browse.places": "Places",
   "browse.noDishes": "No dishes match this category yet.",
   "browse.noPlaces": "No places match this category yet.",
+  "browse.placesNearby": "Places near you",
+  "browse.placesByArea": "Places in {area}",
+  "browse.allKinds": "All places",
   "browse.loading": "Gathering dishes and places…",
   "browse.branchCount": "{count} branches",
 
@@ -378,6 +382,7 @@ export const ar: Record<TranslationKey, string> = {
   // Moment-led dish discovery
   "dishes.filterPicks": "صفِّ هذه الاختيارات…",
   "dishes.searchPlaceholder": "ابحث عن أطباق أو أماكن…",
+  "search.clear": "مسح البحث",
   "dishes.rightNow": "الآن",
   "dishes.contextTitle": "طعام يناسب لحظتك",
   "dishes.contextSubtitle": "اختيارات حسب وقت اليوم والطقس حولك. اختر مزاجك لتناسبك أكثر.",
@@ -421,6 +426,9 @@ export const ar: Record<TranslationKey, string> = {
   "browse.places": "أماكن",
   "browse.noDishes": "لا توجد أطباق في هذا التصنيف بعد.",
   "browse.noPlaces": "لا توجد أماكن في هذا التصنيف بعد.",
+  "browse.placesNearby": "أماكن قريبة منك",
+  "browse.placesByArea": "أماكن في {area}",
+  "browse.allKinds": "كل الأماكن",
   "browse.loading": "نجمع الأطباق والأماكن…",
   "browse.branchCount": "{count} فروع",
 

@@ -82,3 +82,9 @@ docs
 dakahlia_comprehensive_food_data
 dakahlia_all_18_markaz_exhaustive_data.csv
 dakahlia_menus_photos.csv
+# Google Maps scrape (dakahlia_food): datasets stay tracked as import provenance,
+# but the scraper's resumable working state must never be committed.
+dakahlia_food/progress.json
+dakahlia_food/run.log
+dakahlia_food/maxun_run.json
+dakahlia_food/scraper/node_modules/

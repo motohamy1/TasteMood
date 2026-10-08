@@ -15,6 +15,8 @@
     "import:places": "tsx src/importer/run.ts",
     "import:csv": "tsx src/importer/run-csv.ts",
     "import:markaz": "tsx src/importer/run-markaz.ts",
+    "import:gmaps": "tsx src/importer/run-gmaps-playwright.ts",
+    "import:gmaps:publish": "tsx scripts/publish-gmaps-import.ts",
     "places:publish": "tsx src/importer/publish-places.ts",
     "enrich:menus": "tsx src/ai/enrichment/run.ts",
     "test": "vitest run",

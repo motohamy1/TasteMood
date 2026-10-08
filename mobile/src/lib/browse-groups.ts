@@ -90,6 +90,9 @@ export function cardFromRestaurant(
     isOpen: restaurant.branch?.isOpen ?? null,
     distanceMeters: restaurant.distanceMeters,
     branchesCount: restaurant.branchesCount,
+    placeKind: restaurant.placeKind,
+    rating: restaurant.branch?.rating ?? null,
+    reviewsCount: restaurant.branch?.reviewsCount ?? null,
   };
 }
 
@@ -119,6 +122,9 @@ export function cardsFromRecommendations(
       isOpen: item.branch?.isOpen ?? null,
       distanceMeters: item.distanceMeters,
       branchesCount: null,
+      placeKind: null,
+      rating: null,
+      reviewsCount: null,
     };
   }
   return Object.values(byRestaurant);

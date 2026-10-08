@@ -15,7 +15,33 @@ import {
   RestaurantAreaCountDTO,
   RestaurantBrowseDTO,
   RestaurantDetailDTO,
+  RestaurantKindCountDTO,
 } from './presenter.js';
+
+/**
+ * Bilingual labels for the kinds the importer writes. Kept here (not in the
+ * taxonomy) because this is presentation for the browse filter, and a kind may
+ * exist in the data without a label.
+ */
+const PLACE_KIND_LABELS_EN: Record<string, string> = {
+  restaurant: 'Restaurant',
+  cafe: 'Coffee shop',
+  fast_food: 'Fast food',
+  bakery: 'Bakery',
+  ice_cream: 'Ice cream',
+  bar: 'Cafe & lounge',
+  food_court: 'Food court',
+};
+
+const PLACE_KIND_LABELS_AR: Record<string, string> = {
+  restaurant: 'مطعم',
+  cafe: 'كافيه',
+  fast_food: 'أكل سريع',
+  bakery: 'مخبز',
+  ice_cream: 'آيس كريم',
+  bar: 'مقهى',
+  food_court: 'فود كورت',
+};
 
 export interface RestaurantBrowsePage {
   items: RestaurantBrowseDTO[];
@@ -77,6 +103,24 @@ export class RestaurantService {
     ]);
 
     return presentRestaurantAreas(cities, countRestaurantsByCity(branchPairs));
+  }
+
+  /**
+   * Kinds of place the catalogue holds, with counts, so the client can offer a
+   * "coffee shops" filter that reflects real coverage instead of a fixed list
+   * that might match nothing.
+   */
+  async getPlaceKinds(params: QueryRestaurantCityInput): Promise<RestaurantKindCountDTO[]> {
+    const rows = await restaurantRepository.findActiveBranchKindCounts(params.governorate);
+
+    return rows
+      .map((row) => ({
+        kind: row.placeKind,
+        count: row.branchCount,
+        nameEn: PLACE_KIND_LABELS_EN[row.placeKind] ?? null,
+        nameAr: PLACE_KIND_LABELS_AR[row.placeKind] ?? null,
+      }))
+      .filter((row) => row.nameEn !== null || row.nameAr !== null);
   }
 
   async getRestaurantById(id: string): Promise<RestaurantDetailDTO> {

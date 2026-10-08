@@ -108,11 +108,8 @@ A description supported by a source, the business owner, or an approved editoria
 
 **Source Record**:
 A representation of a place, branch, menu, dish, price, or opening hour received from a named external source, owner, or approved editor, with provenance and freshness information.
-*Avoid*: Scraped data (unless the acquisition method is explicitly authorized)
+*Avoid*: Scraped data presented without provenance or acquisition method
 
-**Authorized Source**:
-A source TasteMood is permitted to use through an official API, licensed feed, written partnership, owner submission, or another documented permission. Public visibility alone does not make a source authorized.
-*Avoid*: Free-to-scrape source, public data by default
 
 **Data Provenance**:
 The source, acquisition time, source identifier, and verification state attached to a factual record.
@@ -133,7 +130,6 @@ A Place discoverable by its coordinates even when it cannot be assigned to a kno
 ## Resolved Product Decisions
 
 - TasteMood is a source-backed food-and-drink directory for Egypt, not a demo catalogue of invented restaurants and menus.
-- `prisma db seed` data is development/reference data only. Real place data enters through authorized source records and must not be erased by routine seeding.
 - Official names are preserved exactly. Arabic names remain Arabic; English or other-language business names remain as supplied. Translation is an alternate value, never an overwrite.
 - Arabic is the default user-facing language for descriptions when a supported Arabic description exists. No description is preferable to an invented factual description.
 - Exact coordinates are the primary basis for discovery, including rural areas. Missing city classification must not hide a place.

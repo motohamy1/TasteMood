@@ -39,8 +39,18 @@ const detailRowInclude = {
   },
 } as const;
 
+/**
+ * `coffee` is the word users and the app use; `cafe` is what the importer
+ * stores. Aliasing here keeps the vocabulary of the query param friendly
+ * without inventing a second kind in the data.
+ */
+const PLACE_KIND_ALIASES: Record<string, string> = {
+  coffee: 'cafe',
+};
+
 function buildWhere(params: QueryRestaurantInput): Prisma.RestaurantWhereInput {
-  const { cuisine, priceRange, search, status, verificationStatus, governorate, city } = params;
+  const { cuisine, priceRange, search, status, verificationStatus, governorate, city, placeKind } =
+    params;
 
   return {
     ...(status ? { status } : { status: 'ACTIVE' }),
@@ -69,13 +79,18 @@ function buildWhere(params: QueryRestaurantInput): Prisma.RestaurantWhereInput {
         }
       : {}),
     // Location filters match a restaurant that HAS an ACTIVE branch there.
-    ...(governorate || city
+    ...(governorate || city || placeKind
       ? {
           branches: {
             some: {
               status: 'ACTIVE',
               ...(city ? { city: { slug: city } } : {}),
               ...(governorate ? { governorate: { slug: governorate } } : {}),
+              // A multi-valued filter is one AND-ed condition, not several `some`
+              // clauses: separate `some`s would let branch A match the city and
+              // branch B match the kind, admitting places that satisfy neither
+              // area nor kind in a single location.
+              ...(placeKind ? { placeKind: PLACE_KIND_ALIASES[placeKind] ?? placeKind } : {}),
             },
           },
         }
@@ -128,6 +143,34 @@ export class RestaurantRepository {
       },
       orderBy: { nameEn: 'asc' },
     });
+  }
+
+  /**
+   * What kinds of place the catalogue actually holds, with counts.
+   *
+   * Branch kinds, not brand kinds: a chain can be a cafe on one street and a
+   * restaurant on another, and the browse filter reads better as "coffee
+   * shops near me" than as a brand-level single label. Kinds with no ACTIVE
+   * branches are omitted so the filter never offers an empty result.
+   */
+  async findActiveBranchKindCounts(
+    governorate?: string
+  ): Promise<Array<{ placeKind: string; branchCount: number }>> {
+    const grouped = await prisma.branch.groupBy({
+      by: ['placeKind'],
+      where: {
+        status: 'ACTIVE',
+        restaurant: { status: 'ACTIVE' },
+        placeKind: { not: null },
+        ...(governorate ? { governorate: { slug: governorate } } : {}),
+      },
+      _count: { _all: true },
+    });
+
+    return grouped
+      .filter((row): row is typeof row & { placeKind: string } => row.placeKind !== null)
+      .map((row) => ({ placeKind: row.placeKind, branchCount: row._count._all }))
+      .sort((a, b) => b.branchCount - a.branchCount);
   }
 
   /** `(restaurant, city)` pairs of ACTIVE branches of ACTIVE restaurants. */

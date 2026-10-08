@@ -154,6 +154,15 @@ model Branch {
   coverImageUrl      String?
   photoAttribution   String?
   source             String                @default("MANUAL")
+  // What kind of place this is (cafe, bakery, restaurant, ...). Drives how the
+  // app groups and labels places. Optional: not every source reports it.
+  placeKind          String?
+  // Optional source provenance. NOT a display requirement: a place with no
+  // rating is still discoverable, because discovery is coordinate-based.
+  rating             Decimal?              @db.Decimal(2, 1)
+  reviewsCount       Int?
+  googleMapsUrl      String?
+  sourceAcquiredAt   DateTime?
   atmospheres        BranchAtmosphere[]
   operatingHours     BranchOperatingHour[]
   city               City?                 @relation(fields: [cityId], references: [id])
@@ -167,6 +176,7 @@ model Branch {
   @@index([latitude, longitude])
   @@index([cityId])
   @@index([governorateId])
+  @@index([placeKind])
   @@map("branches")
 }
 

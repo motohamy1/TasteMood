@@ -3,8 +3,9 @@ import { Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
 
 import { cn } from "@/lib/cn";
-import { displayName, pickLabel, useLang, useT } from "@/i18n";
+import { pickLabel, useT } from "@/i18n";
 import { formatDistance } from "@/lib/format";
+import { usePlaceCardText } from "@/lib/place-card";
 import type { RestaurantCardItem } from "@/types/restaurant";
 import { CARD_SHADOW, COLORS } from "@/lib/theme";
 
@@ -14,18 +15,17 @@ interface Props {
 }
 
 /**
- * Place card for the browse rails — dark food-delivery style.
- * Photo on top (or emoji placeholder), then name + cuisine + status.
+ * Place card for the browse rails.
+ *
+ * The hierarchy is deliberate: WHAT the place is (kind + cuisine), then WHERE it
+ * is (area + distance). Rating, when the source happened to report one, is a
+ * quiet trailing detail — 262 of the 969 active places have none, so the card is
+ * built to look complete without it and never reserves space for it.
  */
 export function RestaurantCard({ item, className }: Props) {
   const t = useT();
-  const lang = useLang();
+  const { name, glyph, descriptor, rating, lang } = usePlaceCardText(item);
 
-  const name = displayName(lang, item);
-  const cuisines = item.cuisines
-    .slice(0, 2)
-    .map((cuisine) => pickLabel(lang, cuisine.name, cuisine.nameAr ?? undefined))
-    .join(" · ");
   const place = item.area
     ? pickLabel(lang, item.area.name, item.area.nameAr)
     : item.address;
@@ -60,11 +60,13 @@ export function RestaurantCard({ item, className }: Props) {
                 justifyContent: "center",
               }}
             >
-              <Text style={{ fontSize: 44 }}>🍽</Text>
+              <Text style={{ fontSize: 40 }}>{glyph}</Text>
             </View>
           )}
 
-          {/* Open/closed badge */}
+          {/* Open/closed badge. Most of the catalogue has no published hours, so
+              this is frequently "not listed" — never hidden, because a place with
+              unknown hours is still open to the idea of going. */}
           <View
             style={{
               position: "absolute",
@@ -111,9 +113,9 @@ export function RestaurantCard({ item, className }: Props) {
             {name}
           </Text>
 
-          {cuisines ? (
+          {descriptor ? (
             <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: "600", color: COLORS.accentText }}>
-              {cuisines}
+              {descriptor}
             </Text>
           ) : null}
 
@@ -128,6 +130,10 @@ export function RestaurantCard({ item, className }: Props) {
             <Text style={{ fontSize: 10, color: COLORS.mute }}>
               {t("browse.branchCount", { count: item.branchesCount })}
             </Text>
+          ) : null}
+
+          {rating ? (
+            <Text style={{ fontSize: 10, color: COLORS.mute }}>★ {rating}</Text>
           ) : null}
         </View>
       </Pressable>

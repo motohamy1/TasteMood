@@ -34,6 +34,17 @@ export class RestaurantController {
     }
   }
 
+  async getPlaceKinds(req: Request, res: Response, next: NextFunction) {
+    try {
+      const kinds = await restaurantService.getPlaceKinds(
+        req.query as unknown as QueryRestaurantCityInput
+      );
+      res.json({ success: true, data: kinds });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getRestaurantById(req: Request, res: Response, next: NextFunction) {
     try {
       const restaurant = await restaurantService.getRestaurantById(req.params.id);

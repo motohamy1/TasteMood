@@ -8,6 +8,8 @@
  * Geo decisions (open state, distance) are delegated to the branches
  * availability module — the single owner of that math.
  */
+import type { Prisma } from '@prisma/client';
+
 import { Coordinates } from '../../common/utils/geo.utils.js';
 import { evaluateBranch, OperatingHoursLike } from '../branches/availability.js';
 import { DishDTO, presentDish } from '../dishes/presenter.js';
@@ -37,6 +39,20 @@ export interface RestaurantBranchDTO {
   isOpen: boolean | null;
   area: RestaurantAreaRefDTO | null;
   atmospheres: string[];
+  /**
+   * What kind of place this is (cafe, bakery, restaurant, ...). Drives the kind
+   * filter and the card label. `null` when the source did not classify it.
+   */
+  placeKind: string | null;
+  /**
+   * Source-reported rating, when the source provided one. Optional provenance,
+   * never a precondition for showing the place: 262 of the active catalogue has
+   * no rating and must render identically.
+   */
+  rating: number | null;
+  reviewsCount: number | null;
+  /** Link out to the source listing. */
+  mapsUrl: string | null;
 }
 
 export interface RestaurantBrowseDTO {
@@ -55,6 +71,8 @@ export interface RestaurantBrowseDTO {
   branch: RestaurantBranchDTO | null;
   branchesCount: number;
   distanceMeters: number | null;
+  /** The shown branch's kind, hoisted so the client need not reach into `branch`. */
+  placeKind: string | null;
 }
 
 export interface RestaurantDetailDTO extends RestaurantBrowseDTO {
@@ -69,6 +87,14 @@ export interface RestaurantAreaCountDTO extends RestaurantAreaRefDTO {
   latitude: number | null;
   longitude: number | null;
   restaurantCount: number;
+}
+
+/** Row of GET /restaurants/kinds — a place kind the catalogue actually holds. */
+export interface RestaurantKindCountDTO {
+  kind: string;
+  count: number;
+  nameEn: string | null;
+  nameAr: string | null;
 }
 
 /** Shape of a `city`/`governorate` selection on a branch row. */
@@ -88,6 +114,22 @@ export interface RestaurantBranchRowLike {
   operatingHours?: OperatingHoursLike[] | null;
   city?: RestaurantAreaRowLike | null;
   atmospheres?: { atmosphereTag: { name: string } }[] | null;
+  placeKind?: string | null;
+  /**
+   * Prisma returns `Decimal` for `Decimal?` columns. The loose type here is
+   * deliberate: it accepts both the Decimal instance and a plain number, so the
+   * presenter stays usable from tests and fixtures.
+   */
+  rating?: Prisma.Decimal | number | null;
+  reviewsCount?: number | null;
+  googleMapsUrl?: string | null;
+}
+
+/** Decimal (or number) to the number the wire format carries. */
+function ratingToNumber(rating: Prisma.Decimal | number | null | undefined): number | null {
+  if (rating === null || rating === undefined) return null;
+  const value = typeof rating === 'number' ? rating : rating.toNumber();
+  return Number.isFinite(value) ? value : null;
 }
 
 export interface RestaurantRowLike {
@@ -264,6 +306,10 @@ export function presentRestaurantBranch(entry: EvaluatedRestaurantBranch): Resta
     isOpen: entry.isOpen,
     area: city ? { slug: city.slug, nameEn: city.nameEn, nameAr: city.nameAr } : null,
     atmospheres: (branch.atmospheres ?? []).map(({ atmosphereTag }) => atmosphereTag.name),
+    placeKind: branch.placeKind ?? null,
+    rating: ratingToNumber(branch.rating),
+    reviewsCount: branch.reviewsCount ?? null,
+    mapsUrl: branch.googleMapsUrl ?? null,
   };
 }
 
@@ -295,6 +341,7 @@ function buildBrowseDTO(
     branch: primaryBranch ? presentRestaurantBranch(primaryBranch) : null,
     branchesCount: branches.length,
     distanceMeters: hasOrigin ? minDistanceMeters(branches) : null,
+    placeKind: primaryBranch?.branch.placeKind ?? null,
   };
 }
 

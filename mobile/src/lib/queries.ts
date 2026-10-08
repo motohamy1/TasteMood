@@ -20,6 +20,7 @@ import {
   getPairTaste,
   getRecommendations,
   getRestaurant,
+  getPlaceKinds,
   getRestaurantAreas,
   getRestaurants,
   updateMyPreferences,
@@ -33,6 +34,7 @@ import type {
   RecommendationRequest,
 } from "@/types/recommendation";
 import type {
+  PlaceKindCount,
   RestaurantArea,
   RestaurantDetail,
   RestaurantQuery,
@@ -53,6 +55,7 @@ export const queryKeys = {
   restaurants: (params: RestaurantQuery = {}) =>
     ["restaurants", params] as const,
   restaurantAreas: ["restaurants", "areas"] as const,
+  placeKinds: ["restaurants", "kinds"] as const,
   restaurant: (id: string) => ["restaurant", id] as const,
   preferences: ["preferences", "me"] as const,
 };
@@ -161,6 +164,58 @@ export function useRestaurantAreas() {
     queryFn: () => getRestaurantAreas(),
     staleTime: 30 * 60_000,
   });
+}
+
+/**
+ * Place kinds the catalogue actually holds. Long stale time: a place kind
+ * appearing or disappearing is a rare catalogue change, and the filter should
+ * not flicker.
+ */
+export function usePlaceKinds() {
+  return useQuery({
+    queryKey: queryKeys.placeKinds,
+    queryFn: () => getPlaceKinds(),
+    staleTime: 60 * 60_000,
+  });
+}
+
+/**
+ * Places nearest the user, for the location-first browse.
+ *
+ * `radiusKm` is required rather than defaulted: the backend ignores it without
+ * coordinates, so a caller who means "near me" must actually supply both, and
+ * this makes that explicit at the call site rather than a silent full-catalogue
+ * fetch.
+ */
+export function usePlacesNear({
+  latitude,
+  longitude,
+  radiusKm,
+  city,
+  placeKind,
+  search,
+  limit = 20,
+}: {
+  latitude: number | null | undefined;
+  longitude: number | null | undefined;
+  radiusKm: number;
+  city?: string;
+  placeKind?: RestaurantQuery["placeKind"];
+  search?: string;
+  limit?: number;
+}) {
+  const hasOrigin = typeof latitude === "number" && typeof longitude === "number";
+  const params: RestaurantQuery = {
+    limit,
+    radiusKm,
+    ...(hasOrigin ? { latitude, longitude } : {}),
+    ...(city ? { city } : {}),
+    ...(placeKind ? { placeKind } : {}),
+    ...(search ? { search } : {}),
+    sort: hasOrigin ? "distance" : "newest",
+  };
+
+  return useRestaurants(params, { enabled: hasOrigin || !!city });
 }
 
 export function useRestaurant(id: string | undefined) {

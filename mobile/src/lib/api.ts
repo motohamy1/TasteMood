@@ -18,6 +18,7 @@ import type {
 } from "@/types/recommendation";
 import type { InteractionType } from "@/types/interaction";
 import type {
+  PlaceKindCount,
   RestaurantArea,
   RestaurantDetail,
   RestaurantQuery,
@@ -192,6 +193,14 @@ export function getRestaurants(params: RestaurantQuery = {}) {
 /** Areas (markaz) that have at least one restaurant, with counts + centres. */
 export function getRestaurantAreas(params: { governorate?: string } = {}) {
   return request<RestaurantArea[]>("/restaurants/cities", { query: params });
+}
+
+/**
+ * Kinds of place the catalogue actually holds, with counts. The browse filter
+ * uses this so "coffee shops" is only offered when coffee shops exist in scope.
+ */
+export function getPlaceKinds(params: { governorate?: string } = {}) {
+  return request<PlaceKindCount[]>("/restaurants/kinds", { query: params });
 }
 
 export function getRestaurant(id: string) {

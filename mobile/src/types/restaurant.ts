@@ -27,6 +27,20 @@ export interface RestaurantAreaRef {
   nameAr: string;
 }
 
+/**
+ * What kind of place this is. `cafe` is a coffee shop; `restaurant`,
+ * `fast_food`, `bakery`, `ice_cream`, `bar`, `food_court` are the rest.
+ * Null when the source did not classify it, which is common for older imports.
+ */
+export type PlaceKind =
+  | "restaurant"
+  | "cafe"
+  | "fast_food"
+  | "bakery"
+  | "ice_cream"
+  | "bar"
+  | "food_court";
+
 export interface RestaurantBranch {
   id: string;
   name: string;
@@ -38,6 +52,16 @@ export interface RestaurantBranch {
   isOpen: boolean | null;
   area: RestaurantAreaRef | null;
   atmospheres: string[];
+  placeKind: PlaceKind | null;
+  /**
+   * Source-reported rating, when there is one. Optional provenance, never a
+   * requirement: most of the catalogue has no rating and every place must show
+   * and browse identically without it.
+   */
+  rating: number | null;
+  reviewsCount: number | null;
+  /** Link out to the source listing. */
+  mapsUrl: string | null;
 }
 
 export interface RestaurantSummary {
@@ -56,6 +80,8 @@ export interface RestaurantSummary {
   branch: RestaurantBranch | null;
   branchesCount: number;
   distanceMeters: number | null;
+  /** The shown branch's kind, hoisted so cards need not reach into `branch`. */
+  placeKind: PlaceKind | null;
 }
 
 export interface RestaurantDetail extends RestaurantSummary {
@@ -81,6 +107,21 @@ export interface RestaurantCardItem {
   isOpen: boolean | null;
   distanceMeters: number | null;
   branchesCount: number | null;
+  placeKind: PlaceKind | null;
+  /**
+   * Optional. Rendered only when present; its absence must never change the
+   * card's layout or hide the place.
+   */
+  rating: number | null;
+  reviewsCount: number | null;
+}
+
+/** A place kind the catalogue actually holds — drives the browse filter. */
+export interface PlaceKindCount {
+  kind: string;
+  count: number;
+  nameEn: string | null;
+  nameAr: string | null;
 }
 
 /** Query accepted by GET /restaurants. */
@@ -92,6 +133,8 @@ export type RestaurantQuery = {
   priceRange?: "BUDGET" | "MODERATE" | "EXPENSIVE" | "LUXURY";
   governorate?: string;
   city?: string;
+  /** `coffee` is an alias the API maps to `cafe`. */
+  placeKind?: PlaceKind | "coffee";
   latitude?: number;
   longitude?: number;
   radiusKm?: number;

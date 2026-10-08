@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+﻿import { useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -13,15 +13,19 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { DishCard } from "@/components/dish-card";
+import { RestaurantCard } from "@/components/restaurant-card";
 import { tabIcon } from "@/components/tab-icons";
 import { AmbientGlow } from "@/components/ambient-glow";
 import {
   useDishes,
   useMyPreferences,
+  usePlaceKinds,
+  usePlacesNear,
   useRecommendations,
   useRestaurantAreas,
 } from "@/lib/queries";
 import { useClock, useLiveContext } from "@/lib/live-context";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import {
   SLOT_LABELS,
   WEATHER_OPTIONS,
@@ -30,13 +34,16 @@ import {
   type WeatherCondition,
 } from "@/lib/personality";
 import {
+  cardFromRestaurant,
   dedupeRecommendations,
   nearestArea,
 } from "@/lib/browse-groups";
+import { isPlaceKind, placeKindGlyph, placeKindLabel } from "@/lib/place-card";
 import type {
   RecommendationItem,
   RecommendationRequest,
 } from "@/types/recommendation";
+import type { PlaceKind } from "@/types/restaurant";
 import type { TranslationKey } from "@/i18n/dictionaries";
 import { displayName, useLang, useT } from "@/i18n";
 import { cn } from "@/lib/cn";
@@ -77,6 +84,7 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
   const [weatherOverride, setWeatherOverride] = useState<WeatherCondition | null>(null);
   const [areaSlug, setAreaSlug] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
+  const [kindSlug, setKindSlug] = useState<PlaceKind | null>(null);
 
   const liveWeather = weatherOverride ?? live.weatherCategory;
   const ready = !live.loading && !preferences.isLoading;
@@ -104,8 +112,10 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
   }, [clock.slot, liveWeather, preferences.data]);
 
   const weatherPicks = useRecommendations(ready ? weatherRequest : null);
+  // Debounced so typing filters the rails without a request per keystroke.
+  const search = useDebouncedValue(searchText.trim(), 300);
   const areaDishes = useDishes(
-    { city: activeArea?.slug, limit: 12 },
+    { city: activeArea?.slug, limit: 12, ...(search ? { search } : {}) },
     { enabled: ready && activeArea !== null }
   );
 
@@ -115,9 +125,30 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
   );
   const areaDishCards = areaDishes.data ?? [];
 
+  // ── Places rail ──
+  // Coordinates win when the user has not pinned a specific area; picking an
+  // area chip switches the rail to that markaz, so the two controls never fight.
+  const kindList = usePlaceKinds().data ?? [];
+  const areaChosen = activeAreaSlug !== null;
+  const placesByCoords = !areaChosen && nearMeAvailable;
+  const nearbyPlaces = usePlacesNear({
+    latitude: live.latitude,
+    longitude: live.longitude,
+    radiusKm: 15,
+    city: placesByCoords ? undefined : (activeArea?.slug ?? undefined),
+    placeKind: kindSlug ?? undefined,
+    search: search || undefined,
+    limit: 10,
+  });
+  const placeCards = useMemo(
+    () => (nearbyPlaces.data ?? []).map(cardFromRestaurant),
+    [nearbyPlaces.data]
+  );
+
   const refreshing =
     weatherPicks.isRefetching ||
-    areaDishes.isRefetching;
+    areaDishes.isRefetching ||
+    nearbyPlaces.isRefetching;
 
   // Greeting based on time slot
   const greetingLine = (() => {
@@ -145,6 +176,7 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
             onRefresh={() => {
               void weatherPicks.refetch();
               void areaDishes.refetch();
+              void nearbyPlaces.refetch();
               void areas.refetch();
             }}
             tintColor={COLORS.amber}
@@ -270,28 +302,32 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
             autoCorrect={false}
             autoCapitalize="none"
           />
-          <Pressable
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 17,
-              backgroundColor: "rgba(255,255,255,0.16)",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Image
-              source={tabIcon("filter", COLORS.night, 16)}
-              style={{ width: 16, height: 16 }}
-            />
-          </Pressable>
+          {searchText.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("search.clear")}
+              onPress={() => setSearchText("")}
+              hitSlop={8}
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 17,
+                backgroundColor: "rgba(255,255,255,0.16)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 15, color: COLORS.night, fontWeight: "700" }}>
+                ✕
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {/* ── Weather / Recommendations Section ── */}
         <HomeSectionHeader
           title={t("browse.weatherTitle")}
           subtitle={live.tempC !== null ? `${live.tempC}°C` : undefined}
-          onViewAll={() => {}}
         />
         <View style={{ height: 14 }} />
 
@@ -342,7 +378,6 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
         <HomeSectionHeader
           title={t("browse.locationTitle")}
           subtitle={activeArea ? displayName(lang, { name: activeArea.nameAr, nameEn: activeArea.nameEn }) : undefined}
-          onViewAll={() => {}}
         />
         <View style={{ height: 14 }} />
 
@@ -388,6 +423,70 @@ export function DishesBrowser({ headerLeft = "back" }: Props) {
             ))}
           </ScrollView>
         )}
+
+        <View style={{ height: 30 }} />
+
+        {/* ── Places: kind-first, anchored to wherever the user actually is ── */}
+        <HomeSectionHeader
+          title={
+            !placesByCoords && activeArea
+              ? t("browse.placesByArea", {
+                  area: displayName(lang, {
+                    name: activeArea.nameAr,
+                    nameEn: activeArea.nameEn,
+                  }),
+                })
+              : t("browse.placesNearby")
+          }
+        />
+        <View style={{ height: 14 }} />
+
+        {/* Kind chips: only kinds the catalogue actually holds, with counts */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 20, gap: 8, paddingBottom: 14 }}
+        >
+          <WeatherChip
+            label={t("browse.allKinds")}
+            emoji="✦"
+            selected={kindSlug === null}
+            onPress={() => setKindSlug(null)}
+          />
+          {kindList
+            .filter((kind) => isPlaceKind(kind.kind))
+            .map((kind) => {
+              // Narrowed by the isPlaceKind filter above.
+              const slug = kind.kind as PlaceKind;
+              return (
+                <WeatherChip
+                  key={slug}
+                  label={`${placeKindLabel(slug, lang) ?? slug} (${kind.count})`}
+                  emoji={placeKindGlyph(slug)}
+                  selected={kindSlug === slug}
+                  onPress={() => setKindSlug(kindSlug === slug ? null : slug)}
+                />
+              );
+            })}
+        </ScrollView>
+
+        {nearbyPlaces.isLoading ? (
+          <LoadingRow />
+        ) : nearbyPlaces.isError ? (
+          <ErrorRow onRetry={() => void nearbyPlaces.refetch()} />
+        ) : placeCards.length === 0 ? (
+          <EmptyRow message={t("browse.noPlaces")} />
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}
+          >
+            {placeCards.map((card) => (
+              <RestaurantCard key={card.id} item={card} className="w-[170px]" />
+            ))}
+          </ScrollView>
+        )}
       </ScrollView>
     </View>
   );
@@ -404,7 +503,8 @@ function HomeSectionHeader({
 }: {
   title: string;
   subtitle?: string;
-  onViewAll: () => void;
+  /** Rendered only when there is a real destination — a dead link is worse than none. */
+  onViewAll?: () => void;
 }) {
   return (
     <View
@@ -423,11 +523,13 @@ function HomeSectionHeader({
           <Text style={{ fontSize: 11, color: COLORS.mute }}>{subtitle}</Text>
         ) : null}
       </View>
-      <Pressable onPress={onViewAll} hitSlop={8}>
-        <Text style={{ fontSize: 12, fontWeight: "700", color: COLORS.amber }}>
-          View All
-        </Text>
-      </Pressable>
+      {onViewAll ? (
+        <Pressable onPress={onViewAll} hitSlop={8}>
+          <Text style={{ fontSize: 12, fontWeight: "700", color: COLORS.amber }}>
+            View All
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

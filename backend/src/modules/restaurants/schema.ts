@@ -29,6 +29,13 @@ export const QueryRestaurantSchema = z.object({
   governorate: z.string().optional(),
   /** Match restaurants that have an ACTIVE branch in this city (City.slug). */
   city: z.string().optional(),
+  /**
+   * Match restaurants that have an ACTIVE branch of this kind (Branch.placeKind).
+   * 'coffee' is the friendly alias the app sends for coffee shops.
+   */
+  placeKind: z
+    .enum(['restaurant', 'cafe', 'coffee', 'fast_food', 'bakery', 'ice_cream', 'bar', 'food_court'])
+    .optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   /** Geo radius in kilometres; only applied when latitude+longitude are given. */
