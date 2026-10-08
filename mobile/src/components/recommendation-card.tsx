@@ -93,7 +93,7 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
                   paddingVertical: 2,
                 }}
               >
-                <Text style={{ fontSize: 8, fontWeight: "700", color: COLORS.onCardTag }}>
+                <Text style={{ fontSize: 10, fontWeight: "700", color: COLORS.onCardTag }}>
                   {dish.tasteAttributes[0].toLowerCase().replace(/_/g, " ")}
                 </Text>
               </View>
@@ -115,7 +115,7 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
             </Text>
             <Text
               numberOfLines={1}
-              style={{ fontSize: 11, fontWeight: "600", color: COLORS.mute }}
+              style={{ fontSize: 12, fontWeight: "600", color: COLORS.mute }}
             >
               {restaurantName}
               {branch?.name ? ` · ${branch.name}` : ""}
@@ -124,7 +124,7 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
             {branch?.address ? (
               <Text
                 numberOfLines={2}
-                style={{ fontSize: 10, lineHeight: 14, color: COLORS.mute }}
+                style={{ fontSize: 12, lineHeight: 17, color: COLORS.mute }}
               >
                 {branch.address}
               </Text>
@@ -162,7 +162,7 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
             {reason ? (
               <Text
                 numberOfLines={2}
-                style={{ fontSize: 10, lineHeight: 14, color: COLORS.accentText, fontStyle: "italic" }}
+                style={{ fontSize: 12, lineHeight: 17, color: COLORS.accentText, fontStyle: "italic" }}
               >
                 {reason}
               </Text>
@@ -185,20 +185,20 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
       >
         <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
           {branch?.isOpen === true ? (
-            <Text style={{ fontSize: 10, fontWeight: "700", color: COLORS.successText }}>
+            <Text style={{ fontSize: 12, fontWeight: "700", color: COLORS.successText }}>
               {t("card.openNow")}
             </Text>
           ) : branch?.isOpen === false ? (
-            <Text style={{ fontSize: 10, fontWeight: "700", color: COLORS.dangerText }}>
+            <Text style={{ fontSize: 12, fontWeight: "700", color: COLORS.dangerText }}>
               {t("card.closedNow")}
             </Text>
           ) : (
-            <Text style={{ fontSize: 10, color: COLORS.mute }}>
+            <Text style={{ fontSize: 12, color: COLORS.mute }}>
               {t("card.hoursUnknown")}
             </Text>
           )}
           {distance ? (
-            <Text style={{ fontSize: 10, color: COLORS.mute }}>· {distance}</Text>
+            <Text style={{ fontSize: 12, color: COLORS.mute }}>· {distance}</Text>
           ) : null}
         </View>
 
@@ -214,7 +214,7 @@ export function RecommendationCard({ item, className, onFeedback }: Props) {
               borderColor: COLORS.line,
             }}
           >
-            <Text style={{ fontSize: 10, fontWeight: "600", color: COLORS.accentText }}>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: COLORS.accentText }}>
               ⌖ {t("card.viewOnMap")}
             </Text>
           </Pressable>

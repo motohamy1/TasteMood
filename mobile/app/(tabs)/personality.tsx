@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { Link } from "expo-router";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -74,7 +75,9 @@ import { EmptyState } from "@/components/empty-state";
 import { AmbientGlow } from "@/components/ambient-glow";
 import { cn } from "@/lib/cn";
 import { COLORS } from "@/lib/theme";
-import { pickLabel, useLang, useT } from "@/i18n";
+import { pickLabel, displayName, useLang, useT } from "@/i18n";
+import { foodEmoji } from "@/lib/food-emoji";
+import { formatPrice } from "@/lib/format";
 import { buildTraitBars, resolveTraitVector, type TraitId } from "@/lib/personality-traits";
 import { recordInteraction } from "@/lib/api";
 import { whyLine } from "@/lib/personality-why";
@@ -187,6 +190,49 @@ function dedupe(items: RecommendationItem[]): RecommendationItem[] {
   });
 }
 
+/**
+ * Shared card shell. One padding/rounding/gap definition so every block on the
+ * page breathes the same amount and the surface stays consistent.
+ */
+function Card({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <View className={cn("bg-ink-900 border border-ink-700 rounded-2xl p-4 gap-3.5", className)}>
+      {children}
+    </View>
+  );
+}
+
+/** Section header: small uppercase eyebrow over a readable title. */
+function SectionHeader({
+  eyebrow,
+  title,
+  action,
+}: {
+  eyebrow?: string;
+  title: string;
+  action?: ReactNode;
+}) {
+  return (
+    <View className="flex-row items-end justify-between gap-3">
+      <View className="gap-1 flex-1">
+        {eyebrow ? (
+          <Text className="text-[11px] leading-[14px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
+            {eyebrow}
+          </Text>
+        ) : null}
+        <Text className="text-[16px] leading-[21px] font-bold text-cream">{title}</Text>
+      </View>
+      {action}
+    </View>
+  );
+}
+
 function ToggleChip({
   active,
   label,
@@ -200,11 +246,11 @@ function ToggleChip({
     <Pressable
       onPress={onPress}
       className={cn(
-        "px-2.5 py-1.5 rounded-full border active:opacity-80",
+        "px-3.5 py-2 rounded-full border active:opacity-80",
         active ? "bg-brand-cta border-brand-cta" : "border-ink-700"
       )}
     >
-      <Text className={cn("text-[11px]", active ? "font-semibold text-night" : "text-cream")}>
+      <Text className={cn("text-[13px] leading-[17px]", active ? "font-semibold text-night" : "text-cream")}>
         {label}
       </Text>
     </Pressable>
@@ -234,36 +280,36 @@ function TraitBar({
 }) {
   const clamped = Math.max(4, Math.min(100, pct));
   return (
-    <Pressable onPress={onToggle} hitSlop={4} className="gap-1">
+    <Pressable onPress={onToggle} hitSlop={8} className="gap-2 py-1">
       <View className="flex-row justify-between items-center">
-        <View className="flex-row items-center gap-1.5">
+        <View className="flex-row items-center gap-2">
           <View
-            className={confidence === "measured" ? "w-1.5 h-1.5 rounded-full bg-success" : "w-1.5 h-1.5 rounded-full bg-clay-400"}
+            className={confidence === "measured" ? "w-2 h-2 rounded-full bg-success" : "w-2 h-2 rounded-full bg-clay-400"}
             accessibilityLabel={confidenceLabel}
           />
-          <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.1em] text-cream-mute">
+          <Text className="text-[12px] leading-[16px] font-semibold uppercase tracking-[0.08em] text-cream-mute">
             {label}
           </Text>
         </View>
-        <Text className="text-[9px] leading-[12px] font-bold text-cream">{clamped}%</Text>
+        <Text className="text-[12px] leading-[16px] font-bold text-cream">{clamped}%</Text>
       </View>
-      <View className="h-[4px] rounded-[2px] bg-ink-700 overflow-hidden">
-        <View className="h-[4px] rounded-[2px] bg-brand-500" style={{ width: `${clamped}%` }} />
+      <View className="h-[6px] rounded-[3px] bg-ink-700 overflow-hidden">
+        <View className="h-[6px] rounded-[3px] bg-brand-500" style={{ width: `${clamped}%` }} />
       </View>
       {expanded ? (
-        <View className="gap-1 pt-1">
-          <Text className="text-[10px] leading-[13px] font-semibold text-cream">
+        <View className="gap-1.5 pt-1.5">
+          <Text className="text-[12px] leading-[16px] font-semibold text-cream">
             {sourcesLabel} · {confidenceLabel}
           </Text>
           {sourceLines.map((line) => (
-            <Text key={line} className="text-[10px] leading-[13px] text-cream-mute">
+            <Text key={line} className="text-[12px] leading-[17px] text-cream-mute">
               {line}
             </Text>
           ))}
           {confidence === "low-signal" ? (
             <Link href="/profile" asChild>
-              <Pressable hitSlop={4}>
-                <Text className="text-[10px] leading-[13px] font-semibold text-accent">{ctaLabel}</Text>
+              <Pressable hitSlop={8} className="pt-1">
+                <Text className="text-[12px] leading-[16px] font-semibold text-accent">{ctaLabel}</Text>
               </Pressable>
             </Link>
           ) : null}
@@ -303,19 +349,19 @@ function CoreQuiz({
 
   return (
     <View className="px-4">
-      <View className="bg-wine border border-wine-deep rounded-2xl p-3.5 gap-3">
-        <View className="gap-1">
-          <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.12em] text-accent uppercase">
+      <View className="bg-wine border border-wine-deep rounded-2xl p-4 gap-4">
+        <View className="gap-1.5">
+          <Text className="text-[11px] leading-[14px] font-semibold tracking-[0.12em] text-accent uppercase">
             {t("personality.coreProgress", { step, total: 5 })}
           </Text>
-          <Text className="text-[14px] leading-[19px] font-bold text-cream">
+          <Text className="text-[17px] leading-[23px] font-bold text-cream">
             {t(CORE_QUESTION_COPY[question])}
           </Text>
         </View>
 
         {question === "dietary" ? (
           <>
-            <View className="flex-row flex-wrap gap-1.5">
+            <View className="flex-row flex-wrap gap-2">
               <ToggleChip
                 label={t("personality.noRestrictions")}
                 active={dietaryDraft.length === 0}
@@ -332,15 +378,15 @@ function CoreQuiz({
             </View>
             <Pressable
               onPress={() => onAnswer(dietaryDraft.length ? dietaryDraft.join(",") : "NONE")}
-              className="bg-brand-cta rounded-full py-2.5 items-center active:opacity-80"
+              className="bg-brand-cta rounded-full py-3.5 items-center active:opacity-80"
             >
-              <Text className="text-xs font-bold text-night">{t("personality.coreContinue")}</Text>
+              <Text className="text-[15px] font-bold text-night">{t("personality.coreContinue")}</Text>
             </Pressable>
           </>
         ) : null}
 
         {question === "cuisine" ? (
-          <View className="flex-row flex-wrap gap-1.5">
+          <View className="flex-row flex-wrap gap-2">
             {CUISINE_OPTIONS.map((cuisine) => (
               <ToggleChip
                 key={cuisine}
@@ -358,7 +404,7 @@ function CoreQuiz({
         ) : null}
 
         {question === "mealType" ? (
-          <View className="flex-row flex-wrap gap-1.5">
+          <View className="flex-row flex-wrap gap-2">
             {MEAL_TYPE_OPTIONS.map((option) => (
               <ToggleChip
                 key={option.value}
@@ -376,7 +422,7 @@ function CoreQuiz({
         ) : null}
 
         {question === "spice" ? (
-          <View className="flex-row flex-wrap gap-1.5">
+          <View className="flex-row flex-wrap gap-2">
             {SPICE_OPTIONS.map((option) => (
               <ToggleChip
                 key={option.value}
@@ -389,17 +435,17 @@ function CoreQuiz({
         ) : null}
 
         {question === "discovery" ? (
-          <View className="gap-1.5">
+          <View className="gap-2">
             {DISCOVERY_OPTIONS.map((option) => (
               <Pressable
                 key={option.value}
                 onPress={() => onAnswer(option.value)}
-                className="bg-ink-950 border border-ink-700 rounded-xl px-3 py-2 active:opacity-80"
+                className="bg-ink-950 border border-ink-700 rounded-2xl px-4 py-3 gap-1 active:opacity-80"
               >
-                <Text className="text-xs font-semibold text-cream">
+                <Text className="text-[14px] leading-[19px] font-semibold text-cream">
                   {pickLabel(lang, option.label, option.labelAr)}
                 </Text>
-                <Text className="text-[10px] text-cream-mute">
+                <Text className="text-[12px] leading-[17px] text-cream-mute">
                   {pickLabel(lang, option.description, option.descriptionAr)}
                 </Text>
               </Pressable>
@@ -408,7 +454,7 @@ function CoreQuiz({
         ) : null}
 
         {saving ? <ActivityIndicator color={COLORS.amber} /> : null}
-        {error ? <Text className="text-[10px] font-semibold text-danger">{error}</Text> : null}
+        {error ? <Text className="text-[12px] font-semibold text-danger">{error}</Text> : null}
       </View>
     </View>
   );
@@ -424,6 +470,48 @@ interface PairTasteCardProps {
 }
 
 /**
+ * One compact, tappable pair option: visual, name, venue and price — the
+ * "light touch" the ticket asks for, rather than a full recommendation card.
+ * The whole row is the tap target, so choosing needs no feedback glyphs.
+ */
+function PairOption({
+  item,
+  onPress,
+}: {
+  item: RecommendationItem;
+  onPress: () => void;
+}) {
+  const lang = useLang();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      className="flex-row items-center gap-3 bg-ink-900 border border-ink-700 rounded-2xl p-3 active:opacity-80"
+    >
+      <View className="w-[52px] h-[52px] rounded-xl bg-ink-800 items-center justify-center overflow-hidden">
+        {item.dish.imageUrl ? (
+          <Image source={{ uri: item.dish.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" />
+        ) : (
+          <Text className="text-[22px]">{foodEmoji(item.dish)}</Text>
+        )}
+      </View>
+      <View className="flex-1 gap-0.5" style={{ minWidth: 0 }}>
+        <Text numberOfLines={1} className="text-[14px] leading-[19px] font-bold text-cream">
+          {displayName(lang, item.dish)}
+        </Text>
+        <Text numberOfLines={1} className="text-[12px] leading-[16px] font-semibold text-cream-mute">
+          {displayName(lang, item.restaurant)}
+        </Text>
+        <Text className="text-[13px] leading-[18px] font-bold text-accent">
+          {formatPrice(item.dish.price, item.dish.currency)}
+        </Text>
+      </View>
+      <Text className="text-[18px] text-accent">›</Text>
+    </Pressable>
+  );
+}
+
+/**
  * "Which of these two sounds more you tonight?" — two real, verified-
  * available cards from the pair-taste endpoint. One tap records the pick as
  * an ordinary LIKE (a recommendation signal, never a stable preference) and
@@ -434,37 +522,26 @@ function PairTasteCard({ pair, onChoose, onSkip, chosen }: PairTasteCardProps) {
   const t = useT();
   return (
     <View className="px-4">
-      <View className="bg-wine border border-wine-deep rounded-2xl p-3.5 gap-3">
-        <View className="flex-row items-start justify-between gap-2">
-          <View className="gap-1 flex-1">
-            <Text className="text-[13px] leading-[16px] font-bold text-cream">
+      <View className="bg-wine border border-wine-deep rounded-2xl p-4 gap-3.5">
+        <View className="flex-row items-start justify-between gap-3">
+          <View className="gap-1.5 flex-1">
+            <Text className="text-[15px] leading-[20px] font-bold text-cream">
               {t("personality.pairTitle")}
             </Text>
-            <Text className="text-[11px] leading-[15px] text-cream-mute">
+            <Text className="text-[13px] leading-[18px] text-cream-mute">
               {chosen ? t("personality.pairChosen") : t("personality.pairSubtitle")}
             </Text>
           </View>
           <Pressable onPress={onSkip} hitSlop={8}>
-            <Text className="text-[10px] font-semibold text-accent">
+            <Text className="text-[13px] leading-[18px] font-semibold text-accent">
               {t("personality.pairSkip")}
             </Text>
           </Pressable>
         </View>
         {!chosen ? (
-          <View className="flex-row gap-2.5">
+          <View className="gap-3">
             {pair.map((item) => (
-              <View key={item.dish.id} className="flex-1">
-                <RecommendationCard
-                  item={item}
-                  onFeedback={(type) => {
-                    // A pair has no "dislike" meaning — the two cards are a
-                    // binary choice. LIKE picks; DISLIKE declines the whole
-                    // pair rather than silently discarding the tap.
-                    if (type === "LIKE") onChoose(item);
-                    else onSkip();
-                  }}
-                />
-              </View>
+              <PairOption key={item.dish.id} item={item} onPress={() => onChoose(item)} />
             ))}
           </View>
         ) : null}
@@ -507,41 +584,67 @@ function RecommendationResults({
 
   return (
     <>
-      <View className="px-4 gap-2.5">
-        <View className="flex-row items-baseline justify-between">
-          <Text className="text-[13px] leading-[16px] font-bold text-cream">{t("personality.todaysPicks")}</Text>
-          <Text className="text-[10px] leading-[12px] font-semibold text-accent">{picks.length ? t("personality.matched", { count: picks.length }) : ""}</Text>
-        </View>
+      <View className="px-4 gap-4">
+        <SectionHeader
+          title={t("personality.todaysPicks")}
+          action={
+            picks.length ? (
+              <Text className="text-[12px] leading-[16px] font-semibold text-accent">
+                {t("personality.matched", { count: picks.length })}
+              </Text>
+            ) : null
+          }
+        />
         {isLoading ? (
-          <View className="flex-row flex-wrap gap-2.5"><DishSkeletonGrid count={4} /></View>
+          <View className="gap-3"><DishSkeletonGrid count={3} /></View>
         ) : isError ? (
-          <View className="flex-row items-center gap-1.5 bg-danger-bg border border-danger-line rounded-xl px-2.5 py-2">
-            <Text className="text-xs">⚠️</Text>
-            <Text className="text-[10px] font-semibold uppercase text-danger flex-1">
+          <View className="flex-row items-center gap-2.5 bg-danger-bg border border-danger-line rounded-2xl px-4 py-3.5">
+            <Text className="text-base">⚠️</Text>
+            <Text className="text-[13px] leading-[17px] font-semibold text-danger flex-1">
               {error?.message ?? t("personality.unavailable")}
             </Text>
-            <Pressable onPress={() => void refetch()}><Text className="text-[10px] font-bold text-accent">{t("common.retry")}</Text></Pressable>
+            <Pressable onPress={() => void refetch()} hitSlop={8}>
+              <Text className="text-[13px] font-bold text-accent">{t("common.retry")}</Text>
+            </Pressable>
           </View>
         ) : picks.length === 0 ? (
-          <View className="gap-2">
+          <View className="gap-3">
             <EmptyState icon="🤔" title={t("personality.noCloseMatches")} description={t("personality.noCloseMatchesDesc")} />
-            <View className="flex-row gap-2">
-              {weather ? <Pressable onPress={onIgnoreWeather} className="flex-1 border border-ink-700 rounded-full py-2 items-center"><Text className="text-[10px] font-semibold text-cream">{t("personality.ignoreWeather")}</Text></Pressable> : null}
-              {radiusKm === 10 ? <Pressable onPress={() => setRadiusKm(25)} className="flex-1 border border-ink-700 rounded-full py-2 items-center"><Text className="text-[10px] font-semibold text-cream">{t("personality.widen25")}</Text></Pressable> : null}
+            <View className="flex-row gap-3">
+              {weather ? (
+                <Pressable
+                  onPress={onIgnoreWeather}
+                  className="flex-1 border border-ink-700 rounded-full py-3 items-center active:opacity-80"
+                >
+                  <Text className="text-[13px] font-semibold text-cream">{t("personality.ignoreWeather")}</Text>
+                </Pressable>
+              ) : null}
+              {radiusKm === 10 ? (
+                <Pressable
+                  onPress={() => setRadiusKm(25)}
+                  className="flex-1 border border-ink-700 rounded-full py-3 items-center active:opacity-80"
+                >
+                  <Text className="text-[13px] font-semibold text-cream">{t("personality.widen25")}</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         ) : (
-          <View className="flex-row flex-wrap gap-2.5">
+          <View className="gap-3.5">
             {picks.map((item) => (
-              <View key={item.dish.id} className="basis-[48%] flex-1">
+              <View key={item.dish.id} className="gap-2">
                 <RecommendationCard
                   item={item}
                   onFeedback={onFeedback ? (type) => onFeedback(item, type) : undefined}
                 />
-                <Text className="text-[10px] leading-[13px] text-cream-mute mt-1" numberOfLines={2}>
+                <Text className="text-[12px] leading-[17px] text-cream-mute px-1" numberOfLines={2}>
                   {whyLine(item.scoreBreakdown, item, context, lang)}
                 </Text>
-                {feedback[item.dish.id] ? <Text className="text-[9px] text-accent text-center mt-1">{t("personality.signalSaved")}</Text> : null}
+                {feedback[item.dish.id] ? (
+                  <Text className="text-[12px] leading-[16px] font-semibold text-accent px-1">
+                    {t("personality.signalSaved")}
+                  </Text>
+                ) : null}
               </View>
             ))}
           </View>
@@ -550,15 +653,19 @@ function RecommendationResults({
 
       {picks.length > 0 ? (
         <View className="px-4">
-          <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-2">
-            <Text className="text-[13px] leading-[16px] font-bold text-cream">{t("personality.whyTheseFit")}</Text>
-            <Text className="text-[11px] leading-[15px] text-cream-mute">
-              {picks[0]?.reason ?? t("personality.whyTheseFit")}
-            </Text>
-            <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.04em] text-accent">
+          <Card>
+            <View className="gap-2">
+              <Text className="text-[15px] leading-[20px] font-bold text-cream">
+                {t("personality.whyTheseFit")}
+              </Text>
+              <Text className="text-[13px] leading-[19px] text-cream-mute">
+                {picks[0]?.reason ?? t("personality.whyTheseFit")}
+              </Text>
+            </View>
+            <Text className="text-[11px] leading-[15px] font-semibold tracking-[0.04em] text-accent">
               {t("personality.aiInterprets")}
             </Text>
-          </View>
+          </Card>
         </View>
       ) : null}
     </>
@@ -1138,19 +1245,19 @@ export default function PersonalityScreen() {
           />
         }
       >
-        <View className="gap-3.5">
-          <View className="px-4 flex-row items-start gap-3">
-            <View className="flex-1 gap-1">
-              <View className="flex-row items-center gap-1.5">
+        <View className="gap-7">
+          <View className="px-4 flex-row items-start gap-4">
+            <View className="flex-1 gap-2">
+              <View className="flex-row items-center gap-2">
                 <View className="w-2 h-2 rounded-full bg-brand-500" />
-                <Text className="text-[10px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-accent">
+                <Text className="text-[11px] leading-[14px] font-semibold uppercase tracking-[0.14em] text-accent">
                   {t("personality.live")}
                 </Text>
               </View>
-              <Text className="text-[24px] leading-[28px] font-bold text-cream">
+              <Text className="text-[30px] leading-[36px] font-bold text-cream">
                 {t("personality.title")}
               </Text>
-              <Text className="text-[13px] leading-[16px] text-cream-mute">
+              <Text className="text-[15px] leading-[21px] text-cream-mute">
                 {showCoreQuiz ? t("personality.coreSubtitle") : t("personality.subtitle")}
               </Text>
             </View>
@@ -1194,18 +1301,18 @@ export default function PersonalityScreen() {
               ) : null}
 
               <View className="px-4">
-                <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-3">
-                  <View className="flex-row items-center gap-2.5">
-                    <View className="w-[38px] h-[38px] rounded-[10px] bg-wine-deep items-center justify-center">
-                      <Text className="text-[18px] leading-[22px]">🌶️</Text>
+                <Card className="gap-4">
+                  <View className="flex-row items-center gap-3">
+                    <View className="w-[44px] h-[44px] rounded-xl bg-wine-deep items-center justify-center">
+                      <Text className="text-[20px] leading-[24px]">🌶️</Text>
                     </View>
-                    <View className="flex-1 gap-0.5">
-                      <Text className="text-[10px] leading-[12px] font-semibold tracking-[0.12em] text-accent uppercase">
+                    <View className="flex-1 gap-1">
+                      <Text className="text-[11px] leading-[14px] font-semibold tracking-[0.12em] text-accent uppercase">
                         {loadingPrefs && isSignedIn
                           ? t("personality.readingProfile")
                           : t(archetypeKey(spice, cuisines.length))}
                       </Text>
-                      <Text className="text-[11px] leading-[14px] text-cream-mute">
+                      <Text className="text-[13px] leading-[18px] text-cream-mute">
                         {avgMatch !== null
                           ? t("personality.matchWithSession", { pct: avgMatch })
                           : t(PROFILE_STATUS_LABEL[profileStatus])}
@@ -1213,14 +1320,15 @@ export default function PersonalityScreen() {
                     </View>
                     <Link href="/profile" asChild>
                       <Pressable hitSlop={8}>
-                        <Text className="text-[11px] leading-[14px] font-semibold text-accent">{t("common.edit")}</Text>
+                        <Text className="text-[13px] leading-[18px] font-semibold text-accent">{t("common.edit")}</Text>
                       </Pressable>
                     </Link>
                   </View>
-                  <Text className="text-[11px] leading-[15px] text-cream-mute">
+                  <Text className="text-[13px] leading-[19px] text-cream-mute">
                     {t("personality.tasteSummary", { cuisines: tasteSummary })}
                   </Text>
-                  {traitBars.map((bar) => {
+                  <View className="gap-3 pt-1">
+                    {traitBars.map((bar) => {
                     const labelKey =
                       bar.id === "heat"
                         ? ("personality.heat" as const)
@@ -1264,43 +1372,44 @@ export default function PersonalityScreen() {
                       />
                     );
                   })}
+                  </View>
                   {!isSignedIn ? (
                     <Link href="/auth" asChild>
-                      <Pressable hitSlop={4}>
-                        <Text className="text-[11px] leading-[14px] font-semibold text-accent">
+                      <Pressable hitSlop={8}>
+                        <Text className="text-[13px] leading-[18px] font-semibold text-accent">
                           {t("personality.signInToSave")}
                         </Text>
                       </Pressable>
                     </Link>
                   ) : null}
-                </View>
+                </Card>
               </View>
 
               {showFollowUp && followUpQuestion ? (
                 <View className="px-4">
-                  <View className="bg-wine border border-wine-deep rounded-2xl p-3.5 gap-3">
-                    <View className="flex-row items-start justify-between gap-2">
-                      <View className="gap-1 flex-1">
-                        <Text className="text-[13px] font-bold text-cream">
+                  <View className="bg-wine border border-wine-deep rounded-2xl p-4 gap-3.5">
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="gap-1.5 flex-1">
+                        <Text className="text-[15px] leading-[20px] font-bold text-cream">
                           {t("personality.followUpTitle")}
                         </Text>
-                        <Text className="text-[11px] leading-[15px] text-cream-mute">
+                        <Text className="text-[13px] leading-[18px] text-cream-mute">
                           {t("personality.followUpHint", {
                             part: t(FOLLOW_UP_LABEL[followUpQuestion]),
                           })}
                         </Text>
                       </View>
                       <Pressable onPress={dismissFollowUp} hitSlop={8}>
-                        <Text className="text-[10px] font-semibold text-accent">
+                        <Text className="text-[13px] leading-[18px] font-semibold text-accent">
                           {t("personality.followUpSkip")}
                         </Text>
                       </Pressable>
                     </View>
-                    <Text className="text-[12px] leading-[16px] font-semibold text-cream">
+                    <Text className="text-[14px] leading-[20px] font-semibold text-cream">
                       {t(CORE_QUESTION_COPY[followUpQuestion])}
                     </Text>
                     {followUpQuestion === "dietary" ? (
-                      <View className="flex-row flex-wrap gap-1.5">
+                      <View className="flex-row flex-wrap gap-2">
                         {DIETARY_OPTIONS.map((option) => (
                           <ToggleChip
                             key={option.labelKey}
@@ -1316,7 +1425,7 @@ export default function PersonalityScreen() {
                         ))}
                       </View>
                     ) : followUpQuestion === "cuisine" ? (
-                      <View className="flex-row flex-wrap gap-1.5">
+                      <View className="flex-row flex-wrap gap-2">
                         {CUISINE_OPTIONS.map((cuisine) => (
                           <ToggleChip
                             key={cuisine}
@@ -1327,7 +1436,7 @@ export default function PersonalityScreen() {
                         ))}
                       </View>
                     ) : followUpQuestion === "mealType" ? (
-                      <View className="flex-row flex-wrap gap-1.5">
+                      <View className="flex-row flex-wrap gap-2">
                         {MEAL_TYPE_OPTIONS.map((option) => (
                           <ToggleChip
                             key={option.value}
@@ -1338,7 +1447,7 @@ export default function PersonalityScreen() {
                         ))}
                       </View>
                     ) : followUpQuestion === "spice" ? (
-                      <View className="flex-row flex-wrap gap-1.5">
+                      <View className="flex-row flex-wrap gap-2">
                         {SPICE_OPTIONS.map((option) => (
                           <ToggleChip
                             key={option.value}
@@ -1354,12 +1463,12 @@ export default function PersonalityScreen() {
                           <Pressable
                             key={option.value}
                             onPress={() => void answerFollowUp("discovery", option.value)}
-                            className="bg-ink-950 border border-ink-700 rounded-xl px-3 py-2 active:opacity-80"
+                            className="bg-ink-950 border border-ink-700 rounded-2xl px-4 py-3 gap-1 active:opacity-80"
                           >
-                            <Text className="text-xs font-semibold text-cream">
+                            <Text className="text-[14px] leading-[19px] font-semibold text-cream">
                               {pickLabel(lang, option.label, option.labelAr)}
                             </Text>
-                            <Text className="text-[10px] text-cream-mute">
+                            <Text className="text-[12px] leading-[17px] text-cream-mute">
                               {pickLabel(lang, option.description, option.descriptionAr)}
                             </Text>
                           </Pressable>
@@ -1367,20 +1476,20 @@ export default function PersonalityScreen() {
                       </View>
                     )}
                     {savingSetup ? <ActivityIndicator color={COLORS.amber} /> : null}
-                    {setupError ? <Text className="text-[10px] font-semibold text-danger">{setupError}</Text> : null}
+                    {setupError ? <Text className="text-[12px] font-semibold text-danger">{setupError}</Text> : null}
                   </View>
                 </View>
               ) : null}
 
               {showProbe && probe ? (
                 <View className="px-4">
-                  <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3.5 gap-3">
-                    <View className="flex-row items-start justify-between gap-2">
-                      <View className="gap-1 flex-1">
-                        <Text className="text-[13px] font-bold text-cream">
+                  <Card className="gap-3.5">
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="gap-1.5 flex-1">
+                        <Text className="text-[15px] leading-[20px] font-bold text-cream">
                           {t("personality.probeTitle")}
                         </Text>
-                        <Text className="text-[11px] leading-[15px] text-cream-mute">
+                        <Text className="text-[13px] leading-[18px] text-cream-mute">
                           {probe.topic === "budget"
                             ? t("personality.probeBudgetHint")
                             : t("personality.probeDimensionHint", {
@@ -1389,17 +1498,17 @@ export default function PersonalityScreen() {
                         </Text>
                       </View>
                       <Pressable onPress={dismissProbe} hitSlop={8}>
-                        <Text className="text-[10px] font-semibold text-accent">
+                        <Text className="text-[13px] leading-[18px] font-semibold text-accent">
                           {t("personality.probeSkip")}
                         </Text>
                       </Pressable>
                     </View>
                     {probe.topic === "budget" ? (
                       <>
-                        <Text className="text-[12px] leading-[16px] font-semibold text-cream">
+                        <Text className="text-[14px] leading-[20px] font-semibold text-cream">
                           {t("personality.probeBudgetQuestion")}
                         </Text>
-                        <View className="flex-row flex-wrap gap-1.5">
+                        <View className="flex-row flex-wrap gap-2">
                           {PROBE_BUDGET_OPTIONS.map((option) => (
                             <ToggleChip
                               key={option.value}
@@ -1412,26 +1521,24 @@ export default function PersonalityScreen() {
                       </>
                     ) : null}
                     {savingSetup ? <ActivityIndicator color={COLORS.amber} /> : null}
-                    {setupError ? <Text className="text-[10px] font-semibold text-danger">{setupError}</Text> : null}
-                  </View>
+                    {setupError ? <Text className="text-[12px] font-semibold text-danger">{setupError}</Text> : null}
+                  </Card>
                 </View>
               ) : null}
 
-              <View className="px-4 gap-2">
-                <View className="flex-row items-end justify-between">
-                  <View className="gap-1 flex-1">
-                    <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
-                      {t("personality.tuneTodaysPicks")}
-                    </Text>
-                    <Text className="text-[13px] leading-[16px] font-bold text-cream">
-                      {t("personality.whatSoundsRight")}
-                    </Text>
-                  </View>
-                  {isDirty ? (
-                    <Text className="text-[10px] font-semibold text-accent">{t("personality.changesWaiting")}</Text>
-                  ) : null}
-                </View>
-                <View className="flex-row flex-wrap gap-1.5">
+              <View className="px-4 gap-4">
+                <SectionHeader
+                  eyebrow={t("personality.tuneTodaysPicks")}
+                  title={t("personality.whatSoundsRight")}
+                  action={
+                    isDirty ? (
+                      <Text className="text-[12px] leading-[16px] font-semibold text-accent">
+                        {t("personality.changesWaiting")}
+                      </Text>
+                    ) : null
+                  }
+                />
+                <View className="flex-row flex-wrap gap-2">
                   {PERSONALITY_MOODS.map((option) => (
                     <ToggleChip
                       key={option.id}
@@ -1441,81 +1548,82 @@ export default function PersonalityScreen() {
                     />
                   ))}
                 </View>
-                <View className="flex-row items-center gap-2 bg-ink-900 border border-ink-700 rounded-xl px-3 py-1.5">
+                <View className="flex-row items-center gap-2.5 bg-ink-900 border border-ink-700 rounded-2xl px-4 py-2.5">
                   <TextInput
                     value={freeText}
                     onChangeText={setFreeText}
                     placeholder={t("personality.tellAi")}
                     placeholderTextColor={COLORS.mute}
-                    className="flex-1 text-[12px] text-cream"
+                    className="flex-1 text-[14px] py-1 text-cream"
                     returnKeyType="done"
                     onSubmitEditing={updatePicks}
                   />
-                  <Pressable onPress={updatePicks} className="bg-brand-cta rounded-full px-3 py-2 active:opacity-80">
-                    <Text className="text-[10px] font-bold text-night">{t("common.update")}</Text>
+                  <Pressable
+                    onPress={updatePicks}
+                    className="bg-brand-cta rounded-full px-4 py-2.5 active:opacity-80"
+                  >
+                    <Text className="text-[13px] font-bold text-night">{t("common.update")}</Text>
                   </Pressable>
                 </View>
               </View>
 
-              <View className="px-4 gap-2">
-                <Text className="text-[9px] leading-[12px] font-semibold uppercase tracking-[0.12em] text-cream-mute">
-                  {t("personality.liveFactors")}
-                </Text>
-                <View className="bg-ink-900 border border-ink-700 rounded-2xl p-3 gap-3">
-                  <View className="gap-1.5">
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-[11px] font-semibold text-cream">
+              <View className="px-4 gap-4">
+                <SectionHeader title={t("personality.liveFactors")} />
+                <Card className="gap-4">
+                  <View className="gap-3">
+                    <View className="flex-row items-center justify-between gap-3">
+                      <Text className="text-[14px] leading-[19px] font-semibold text-cream">
                         {weatherOption?.emoji ?? live.emoji ?? "🌤️"} {t("personality.weather")}
                       </Text>
-                      <Pressable onPress={() => patchSession({ weatherEnabled: !session.weatherEnabled })}>
-                        <Text className="text-[10px] font-semibold text-accent">
+                      <Pressable onPress={() => patchSession({ weatherEnabled: !session.weatherEnabled })} hitSlop={8}>
+                        <Text className="text-[13px] leading-[18px] font-semibold text-accent">
                           {session.weatherEnabled ? t("common.on") : t("common.off")}
                         </Text>
                       </Pressable>
                     </View>
-                    <Text className="text-[10px] text-cream-mute">
+                    <Text className="text-[12px] leading-[17px] text-cream-mute">
                       {live.tempC !== null && live.condition ? `${live.tempC}°C · ${live.condition}` : live.unavailable ? t("personality.weatherUnavailable") : t("personality.checkingWeather")}
                     </Text>
-                    <View className="flex-row flex-wrap gap-1.5">
+                    <View className="flex-row flex-wrap gap-2">
                       {WEATHER_OPTIONS.map((option) => (
                         <ToggleChip key={option.value} label={`${option.emoji} ${pickLabel(lang, option.label, option.labelAr)}`} active={weather === option.value && session.weatherEnabled} onPress={() => patchSession({ weatherOverride: option.value, weatherEnabled: true })} />
                       ))}
                     </View>
                   </View>
                   <View className="h-px bg-ink-700" />
-                  <View className="gap-1.5">
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-[11px] font-semibold text-cream">🕰️ {t("personality.timeSlot")}</Text>
-                      <Pressable onPress={() => patchSession({ timeEnabled: !session.timeEnabled })}>
-                        <Text className="text-[10px] font-semibold text-accent">{session.timeEnabled ? t("common.on") : t("common.off")}</Text>
+                  <View className="gap-3">
+                    <View className="flex-row items-center justify-between gap-3">
+                      <Text className="text-[14px] leading-[19px] font-semibold text-cream">🕰️ {t("personality.timeSlot")}</Text>
+                      <Pressable onPress={() => patchSession({ timeEnabled: !session.timeEnabled })} hitSlop={8}>
+                        <Text className="text-[13px] leading-[18px] font-semibold text-accent">{session.timeEnabled ? t("common.on") : t("common.off")}</Text>
                       </Pressable>
                     </View>
-                    <Text className="text-[10px] text-cream-mute">
+                    <Text className="text-[12px] leading-[17px] text-cream-mute">
                       {session.timeEnabled ? `${clock.clock} · ${timeLabel}` : t("personality.timeNotShaping")}
                     </Text>
-                    <View className="flex-row flex-wrap gap-1.5">
+                    <View className="flex-row flex-wrap gap-2">
                       {(Object.keys(SLOT_LABELS) as PersonalityMealSlot[]).map((slot) => (
                         <ToggleChip key={slot} label={`${SLOT_LABELS[slot].emoji} ${pickLabel(lang, SLOT_LABELS[slot].word, SLOT_LABELS[slot].labelAr)}`} active={mealSlot === slot && session.timeEnabled} onPress={() => patchSession({ mealSlotOverride: slot, timeEnabled: true })} />
                       ))}
                     </View>
                   </View>
-                  <View className="flex-row flex-wrap gap-1.5">
-                    <View className="bg-wine px-2.5 py-1 rounded-full">
-                      <Text className="text-[10px] font-semibold text-cream">📍 {live.city ?? t("personality.locationOff")}{nearestDistance ? ` · ${nearestDistance}` : ""}</Text>
+                  <View className="flex-row flex-wrap gap-2">
+                    <View className="bg-wine px-3 py-1.5 rounded-full">
+                      <Text className="text-[12px] leading-[16px] font-semibold text-cream">📍 {live.city ?? t("personality.locationOff")}{nearestDistance ? ` · ${nearestDistance}` : ""}</Text>
                     </View>
-                    <View className="bg-wine px-2.5 py-1 rounded-full">
-                      <Text className="text-[10px] font-semibold text-cream">{discoveryPreference === "CURIOUS" ? t("personality.discoveryOn") : t("personality.familiarFirst")}</Text>
+                    <View className="bg-wine px-3 py-1.5 rounded-full">
+                      <Text className="text-[12px] leading-[16px] font-semibold text-cream">{discoveryPreference === "CURIOUS" ? t("personality.discoveryOn") : t("personality.familiarFirst")}</Text>
                     </View>
                     {radiusKm > 10 ? (
-                      <View className="bg-wine px-2.5 py-1 rounded-full">
-                        <Text className="text-[10px] font-semibold text-cream">{t("personality.withinKm", { km: radiusKm })}</Text>
+                      <View className="bg-wine px-3 py-1.5 rounded-full">
+                        <Text className="text-[12px] leading-[16px] font-semibold text-cream">{t("personality.withinKm", { km: radiusKm })}</Text>
                       </View>
                     ) : null}
                   </View>
-                </View>
+                </Card>
                 {isDirty ? (
-                  <Pressable onPress={updatePicks} className="bg-brand-cta rounded-full py-3 items-center active:opacity-80">
-                    <Text className="text-sm font-bold text-night">{t("personality.updatePicks")}</Text>
+                  <Pressable onPress={updatePicks} className="bg-brand-cta rounded-full py-4 items-center active:opacity-80">
+                    <Text className="text-[15px] font-bold text-night">{t("personality.updatePicks")}</Text>
                   </Pressable>
                 ) : null}
               </View>
